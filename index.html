@@ -4379,10 +4379,14 @@ function cancelSelectedInvoice() {
 
   renderInvoiceRegister();
   updateOutstandingBadge();
+  if (currentTab === 'sales')       renderData();
   if (currentTab === 'outstanding') renderOutstandingTab();
-  if (currentTab === 'sales') renderData();
+  // Tab 3 reads lineItemDelivered directly, so it must always be refreshed when an
+  // invoice is cancelled — not just when Tab 3 happens to be the active tab — or it
+  // will keep showing the line as fully delivered/closed until a manual page reload.
+  renderInvoiceTab();
 
-  alert(`Invoice(s) cancelled. Affected line items have been re-opened in Outstanding SO.`);
+  alert(`Invoice(s) cancelled. Affected line items have been re-opened in Outstanding SO and Tab 3.`);
 }
 
 // ── REVISE INVOICE ─────────────────────────────────────────────────────────────
@@ -4404,10 +4408,23 @@ function reviseSelectedInvoice() {
   );
   if (!confirmed) return;
 
-  // Cancel the original invoice first
+  // Cancel the original invoice first (this now also refreshes Tab 3's delivered
+  // quantities — see cancelSelectedInvoice — so it's safe to build the PO map next)
   selectedInvNos.clear();
   selectedInvNos.add(invNo);
-  cancelSelectedInvoice(); // handles reversal + status update
+  cancelSelectedInvoice(); // handles reversal + status update + Tab 3 refresh
+
+  // Switch the tab markers/panels immediately (no setTimeout dependency here —
+  // we render Tab 3 ourselves right below, synchronously, before pre-selecting).
+  currentTab = 'invoice';
+  ['sales','subcon','invoice','outstanding','register','review'].forEach(function(t) {
+    var btn   = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
+    var panel = document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (btn)   btn.classList.toggle('active', t === 'invoice');
+    if (panel) panel.classList.toggle('active', t === 'invoice');
+  });
+  renderInvoiceTab();      // builds window.__invAllGroupsMap fresh, BEFORE we read from it below
+  buildInvCustFilterBar();
 
   // Find the history record to know which items/PO to pre-select
   const hist = invoiceHistory.find(h => h.invNo === invNo);
@@ -4444,8 +4461,10 @@ function reviseSelectedInvoice() {
     document.getElementById('invEmail').value   = addrBook.email || '';
   }
 
-  // Switch to Invoice tab
-  switchTab('invoice');
+  // Re-render Tab 3 NOW that selections are populated, so the checkboxes show as
+  // checked and the qty fields show the pre-filled values immediately — without
+  // this, the page would show everything unchecked until the next manual refresh.
+  renderInvoiceTab();
 
   alert(`MPT/INV/${invNo} has been cancelled and its items are pre-selected in Tab 3.\nReview the selection and click "Create Invoice + DO (PDF)" to generate the revised invoice.`);
 }
