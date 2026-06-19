@@ -479,6 +479,7 @@
     <button class="tab-btn" id="tabBtnOutstanding" onclick="switchTab('outstanding')">Outstanding SO <span id="outstandingBadge" style="background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
     <button class="tab-btn" id="tabBtnRegister" onclick="switchTab('register')">Invoice Register <span id="registerBadge" style="background:#065f46;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
     <button class="tab-btn" id="tabBtnReview" onclick="switchTab('review')">⚠ Review Queue <span id="reviewBadge" style="background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
+    <button class="tab-btn" id="tabBtnVendor" onclick="switchTab('vendor')">📥 Vendor Invoices <span id="vendorBadge" style="background:#7c3aed;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
   </div>
 
   <!-- ===================== TAB 1: SALES ORDERS ===================== -->
@@ -929,6 +930,58 @@
     </div>
   </div>
 
+  <!-- TAB 7: VENDOR INVOICES — auto-scanned from mptmanufacturing@gmail.com and
+       mptadmin2020@gmail.com, parsed via Claude vision API, stored in the
+       "Vendor Invoices" Google Sheet. -->
+  <div class="tab-panel" id="panelVendor">
+    <div class="page-subtitle" style="margin-bottom:14px;">
+      Vendor invoices auto-received from <b>mptmanufacturing@gmail.com</b> and <b>mptadmin2020@gmail.com</b>, extracted automatically.
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+      <button class="refresh-btn" id="vendorScanBtn" onclick="scanVendorInvoicesNow()">📥 Scan Now</button>
+      <span id="vendorScanStatus" style="font-size:12px; color:var(--muted);"></span>
+      <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <select id="vendorStatusFilter" onchange="renderVendorInvoiceTab()" style="padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">All Statuses</option>
+          <option value="New">New</option>
+          <option value="Review Required">Review Required</option>
+          <option value="Reviewed">Reviewed</option>
+        </select>
+        <input type="text" id="vendorSearch" placeholder="Search vendor or invoice no..." oninput="renderVendorInvoiceTab()" style="padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; width:220px;">
+      </div>
+    </div>
+
+    <div class="summary-cards" id="vendorSummaryCards"></div>
+
+    <div id="vendorTableWrap" style="overflow-x:auto; margin-top:16px;">
+      <table id="vendorTable" style="width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:13px;">
+        <thead>
+          <tr style="background:#7c3aed;color:#fff;">
+            <th style="padding:10px 12px;text-align:left">Vendor</th>
+            <th style="padding:10px 12px;text-align:left">Invoice No</th>
+            <th style="padding:10px 12px;text-align:left">Invoice Date</th>
+            <th style="padding:10px 12px;text-align:left">Due Date</th>
+            <th style="padding:10px 12px;text-align:right">Total</th>
+            <th style="padding:10px 12px;text-align:center">Status</th>
+            <th style="padding:10px 12px;text-align:center">PDF</th>
+          </tr>
+        </thead>
+        <tbody id="vendorTableBody">
+          <tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:16px;padding:14px;background:#faf5ff;border:1px solid #d8b4fe;border-radius:10px;font-size:13px;color:#374151;">
+      <b>How this works:</b><br>
+      1. Vendor sends an invoice (PDF/image attachment) to mptmanufacturing@gmail.com or mptadmin2020@gmail.com<br>
+      2. Apps Script scans automatically every 15 minutes (or click <b>Scan Now</b> above for an immediate check)<br>
+      3. Claude extracts vendor name, invoice no, dates, amounts, and line items — saved to the "Vendor Invoices" Google Sheet<br>
+      4. Rows marked <b>Review Required</b> mean extraction failed or was incomplete — open the PDF and fill in the sheet manually
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -993,19 +1046,21 @@ const invoiceHistory = [];
 // lineItemDelivered: itemKey -> total qty delivered so far (across all invoices)
 const lineItemDelivered = {};
 var invoiceRegister  = [];           // all invoices generated this session
+var vendorInvoices   = [];           // vendor invoices auto-extracted from email (Tab 7)
 let selectedInvNos  = new Set();    // for mark-as-paid / SOA in register tab
 var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwBCsnDBGB6ElcS-XYLjLQ6T8VrMS2DRWfq821hmw4SPnyBUNmol8y_gTaYNEYAWY7a6w/exec'; // hardcoded — also overridable from Tab 5 Settings
 let _jsonpSeq        = 0;            // JSONP callback sequence
 var nextInvNumber    = 6228;         // auto-incrementing invoice number, starts after last used (6227)
 var isGeneratingInvoice = false;     // guard against double-clicks / duplicate generation
 // ── VERSION STAMP ─────────────────────────────────────────────────────────────
-var DASHBOARD_VERSION = 'v4-top-actionbar-2026-06-19';
+var DASHBOARD_VERSION = 'v5-vendor-invoices-2026-06-19';
 console.log('%c✅ Work Order Dashboard ' + DASHBOARD_VERSION + ' loaded', 'background:#16a34a;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 // Self-test: confirm the critical functions exist
 window.addEventListener('DOMContentLoaded', function() {
-  var missing = ['updateInvSelectionUI','toggleInvItem','toggleInvPO','toggleInvSelectAll','setInvQty','resetInvLock','assignInvNos','buildInvoiceDataPerPO','recordInvoiceAndUpdateStatus']
+  var missing = ['updateInvSelectionUI','toggleInvItem','toggleInvPO','toggleInvSelectAll','setInvQty','resetInvLock','assignInvNos','buildInvoiceDataPerPO','recordInvoiceAndUpdateStatus','loadVendorInvoices','scanVendorInvoicesNow','renderVendorInvoiceTab']
     .filter(function(fn){ return typeof window[fn] !== 'function'; });
   if (!document.getElementById('genPdfBtnTop')) missing.push('#genPdfBtnTop (top action bar HTML)');
+  if (!document.getElementById('panelVendor')) missing.push('#panelVendor (Tab 7 HTML)');
   if (missing.length) {
     console.error('❌ MISSING FUNCTIONS:', missing.join(', '));
     document.body.insertAdjacentHTML('afterbegin',
@@ -1127,7 +1182,7 @@ function onForexOverride(val) {
 
 function switchTab(tab) {
   currentTab = tab;
-  ['sales','subcon','invoice','outstanding','register','review'].forEach(t => {
+  ['sales','subcon','invoice','outstanding','register','review','vendor'].forEach(t => {
     const btn   = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
     const panel = document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1));
     if (btn)   btn.classList.toggle('active', t === tab);
@@ -1146,6 +1201,15 @@ function switchTab(tab) {
   }
   if (tab === 'outstanding') renderOutstandingTab();
   if (tab === 'review')      setTimeout(renderReviewTab, 50);
+  if (tab === 'vendor') {
+    setTimeout(function() {
+      if (vendorInvoices.length === 0) {
+        loadVendorInvoices();
+      } else {
+        renderVendorInvoiceTab();
+      }
+    }, 50);
+  }
   if (tab === 'register') {
     setTimeout(function() {
       ['regCustFilter','regYearFilter','regMonthFilter','regStatusFilter'].forEach(function(id) {
@@ -1280,6 +1344,11 @@ async function loadData(manual) {
     if (currentTab === 'review')      safeCall('renderReviewTab',      function() { renderReviewTab(); });
     safeCall('updateReviewBadge',      function() { updateReviewBadge(); });
     safeCall('updateOutstandingBadge', function() { updateOutstandingBadge(); });
+    // Vendor Invoices (Tab 7) has its own independent data source and refresh
+    // cadence (15-min trigger + manual Scan Now) — we only refresh its badge
+    // count here from already-loaded data, not a full re-fetch, to avoid an
+    // extra JSONP round trip on every single Refresh Now click.
+    safeCall('updateVendorBadge',      function() { updateVendorBadge(); });
 
   } catch(fatalErr) {
     // Should never reach here since all sub-calls are wrapped, but just in case
@@ -1908,6 +1977,9 @@ fetchForexRate();
 renderSubcon();
 // Initialize outstanding tab badge after a short delay for data to load
 setTimeout(() => { updateOutstandingBadge(); }, 2000);
+// Load vendor invoices in the background so the Tab 7 badge count is accurate
+// immediately, without forcing the user to click into Tab 7 first.
+setTimeout(() => { loadVendorInvoices(); }, 2500);
 // Restore saved Web App URL from localStorage (overrides hardcoded if user set a different one)
 (function() {
   var saved;
@@ -4017,6 +4089,136 @@ function updateRegSyncStatus(state, msg) {
   const status = document.getElementById('regSyncStatus');
   if (dot) { dot.className = 'sync-dot' + (state === 'ok' ? '' : state === 'error' ? ' error' : ' offline'); }
   if (status) status.textContent = msg;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 7: VENDOR INVOICES
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Load vendor invoices from the "Vendor Invoices" Google Sheet via the Web App.
+async function loadVendorInvoices() {
+  if (!WEBAPP_URL) return;
+  const statusEl = document.getElementById('vendorScanStatus');
+  if (statusEl) statusEl.textContent = 'Loading...';
+  try {
+    const json = await jsonpCall({ action: 'get_vendor_invoices' }, 15000);
+    if (json.status === 'ok') {
+      vendorInvoices = json.records || [];
+      if (statusEl) statusEl.textContent = `Loaded ${vendorInvoices.length} invoice(s) · ${new Date().toLocaleTimeString()}`;
+      updateVendorBadge();
+      renderVendorInvoiceTab();
+    } else {
+      if (statusEl) statusEl.textContent = '⚠ ' + (json.message || 'Load error');
+    }
+  } catch(e) {
+    if (statusEl) statusEl.textContent = '⚠ Web App error: ' + e.message;
+  }
+}
+
+// Manually trigger the Gmail scan from the dashboard ("Scan Now" button).
+// Calls the same backend function the time-based trigger calls every 15 min.
+async function scanVendorInvoicesNow() {
+  const btn      = document.getElementById('vendorScanBtn');
+  const statusEl = document.getElementById('vendorScanStatus');
+  if (btn) btn.disabled = true;
+  if (statusEl) statusEl.textContent = 'Scanning mptmanufacturing@gmail.com and mptadmin2020@gmail.com — this can take up to a minute for PDF extraction...';
+  try {
+    const json = await jsonpCall({ action: 'scan_vendor_invoices' }, 90000); // extraction can be slow — generous timeout
+    if (json.status === 'ok') {
+      if (statusEl) statusEl.textContent = `✅ Scan complete — ${json.processed || 0} new invoice(s) processed` + (json.failed ? `, ${json.failed} failed extraction (flagged for review)` : '');
+      await loadVendorInvoices(); // refresh the table with the new rows
+    } else {
+      if (statusEl) statusEl.textContent = '⚠ Scan error: ' + (json.message || 'Unknown error');
+    }
+  } catch(e) {
+    if (statusEl) statusEl.textContent = '⚠ Scan failed: ' + e.message + ' (it may still be running in the background — try Refresh in a minute)';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function updateVendorBadge() {
+  const badge = document.getElementById('vendorBadge');
+  if (badge) {
+    const count = vendorInvoices.filter(r => r.status === 'New' || r.status === 'Review Required').length;
+    badge.textContent = count > 0 ? count : '';
+    badge.style.display = count > 0 ? 'inline' : 'none';
+  }
+}
+
+function renderVendorInvoiceTab() {
+  updateVendorBadge();
+
+  const summaryEl = document.getElementById('vendorSummaryCards');
+  const tbody     = document.getElementById('vendorTableBody');
+  if (!summaryEl || !tbody) return;
+
+  const statusFilter = (document.getElementById('vendorStatusFilter') || {value:''}).value;
+  const search        = ((document.getElementById('vendorSearch') || {value:''}).value || '').toLowerCase();
+
+  let rows = vendorInvoices.filter(function(r) {
+    if (statusFilter && r.status !== statusFilter) return false;
+    if (search) {
+      const hay = (r.vendorName + ' ' + r.invoiceNo).toLowerCase();
+      if (hay.indexOf(search) === -1) return false;
+    }
+    return true;
+  });
+
+  // Newest first
+  rows.sort(function(a, b) {
+    return (b.receivedDate || '').localeCompare(a.receivedDate || '');
+  });
+
+  // Summary cards
+  const totalCount   = vendorInvoices.length;
+  const reviewCount  = vendorInvoices.filter(function(r){ return r.status === 'Review Required'; }).length;
+  const totalAmount  = vendorInvoices.reduce(function(s, r){ return s + (r.total || 0); }, 0);
+  const thisMonthCount = vendorInvoices.filter(function(r) {
+    const m = (r.invoiceDate || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (!m) return false;
+    const now = new Date();
+    return parseInt(m[2]) === (now.getMonth()+1) && parseInt(m[3]) === now.getFullYear();
+  }).length;
+
+  summaryEl.innerHTML =
+    '<div class="summary-card"><div class="num">' + totalCount + '</div><div class="label">Total Vendor Invoices</div></div>' +
+    '<div class="summary-card"><div class="num">' + thisMonthCount + '</div><div class="label">This Month</div></div>' +
+    '<div class="summary-card"><div class="num" style="color:' + (reviewCount > 0 ? '#dc2626' : 'inherit') + '">' + reviewCount + '</div><div class="label">Review Required</div></div>' +
+    '<div class="summary-card"><div class="num">SGD ' + totalAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div><div class="label">Total Value</div></div>';
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8">No vendor invoices found. Click "Scan Now" to check for new emails.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(function(r) {
+    const isReview = r.status === 'Review Required';
+    const statusBadge = isReview
+      ? '<span class="badge" style="background:#fee2e2;color:#dc2626;">Review Required</span>'
+      : r.status === 'Reviewed'
+        ? '<span class="badge" style="background:#dcfce7;color:#15803d;">Reviewed</span>'
+        : '<span class="badge" style="background:#dbeafe;color:#1d4ed8;">New</span>';
+    const rowStyle = isReview ? ' style="background:#fff8f8"' : '';
+    return '<tr' + rowStyle + '>' +
+      '<td style="padding:10px 12px;">' + escapeHtml(r.vendorName || '—') + '</td>' +
+      '<td style="padding:10px 12px;">' + escapeHtml(r.invoiceNo || '—') + '</td>' +
+      '<td style="padding:10px 12px;">' + escapeHtml(r.invoiceDate || '—') + '</td>' +
+      '<td style="padding:10px 12px;">' + escapeHtml(r.dueDate || '—') + '</td>' +
+      '<td style="padding:10px 12px;text-align:right;">' + escapeHtml(r.currency || 'SGD') + ' ' + (r.total || 0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</td>' +
+      '<td style="padding:10px 12px;text-align:center;">' + statusBadge + '</td>' +
+      '<td style="padding:10px 12px;text-align:center;">' +
+        (r.fileUrl ? '<a href="' + r.fileUrl + '" target="_blank" rel="noopener noreferrer" style="color:var(--primary);text-decoration:underline;">Open ↗</a>' : '—') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+// Small helper — escape user/extracted text before injecting into innerHTML
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // Saves invoice to local register immediately, then to Google Drive via JSONP
