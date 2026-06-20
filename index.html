@@ -935,11 +935,11 @@
        "Vendor Invoices" Google Sheet. -->
   <div class="tab-panel" id="panelVendor">
     <div class="page-subtitle" style="margin-bottom:14px;">
-      Vendor invoices auto-received from <b>mptmanufacturing@gmail.com</b>, <b>mptadmin2020@gmail.com</b>, and <b>dominick.han@mikuronpteltd.com</b>, extracted automatically.
+      Vendor invoices sent to <b>mptmanufacturing@gmail.com</b> or <b>mptadmin2020@gmail.com</b> (both forwarded to <b>dominick.han@mikuronpteltd.com</b>), extracted automatically.
     </div>
 
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
-      <button class="refresh-btn" id="vendorScanBtn" onclick="scanVendorInvoicesNow()">📥 Scan Now</button>
+      <button class="refresh-btn" id="vendorScanBtn" onclick="scanVendorInvoicesNow()">🔄 Refresh</button>
       <span id="vendorScanStatus" style="font-size:12px; color:var(--muted);"></span>
       <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
         <select id="vendorStatusFilter" onchange="renderVendorInvoiceTab()" style="padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
@@ -961,7 +961,7 @@
             <th style="padding:10px 12px;text-align:left">Vendor</th>
             <th style="padding:10px 12px;text-align:left">Invoice No</th>
             <th style="padding:10px 12px;text-align:left">Invoice Date</th>
-            <th style="padding:10px 12px;text-align:left">Due Date</th>
+            <th style="padding:10px 12px;text-align:left">Payment Due</th>
             <th style="padding:10px 12px;text-align:right">Total</th>
             <th style="padding:10px 12px;text-align:center">Status</th>
             <th style="padding:10px 12px;text-align:center">PDF</th>
@@ -975,11 +975,12 @@
 
     <div style="margin-top:16px;padding:14px;background:#faf5ff;border:1px solid #d8b4fe;border-radius:10px;font-size:13px;color:#374151;">
       <b>How this works:</b><br>
-      1. Vendor sends an invoice (PDF/image, scanned or e-invoice) to any of the 3 mailboxes above<br>
-      2. Apps Script scans all 3 automatically every 15 minutes (or click <b>Scan Now</b> above for an immediate check) — reads both read and unread emails, then marks them as read<br>
-      3. Claude extracts vendor name, invoice no, dates, amounts, and line items — saved to the "Vendor Invoices" Google Sheet<br>
-      4. Rows marked <b>Review Required</b> mean extraction failed or was incomplete — open the PDF and fill in the sheet manually<br>
-      5. If the same vendor + invoice number is found in more than one mailbox (e.g. forwarded to two addresses), the duplicate copy is highlighted amber in the Sheet but <b>not shown here</b> — only the first one is published to this tab
+      1. Vendor sends an invoice (PDF/image, scanned or e-invoice) to mptmanufacturing@gmail.com or mptadmin2020@gmail.com<br>
+      2. Both mailboxes forward a copy to dominick.han@mikuronpteltd.com, which scans automatically every 15 minutes — reads both read and unread emails, marks them as read once processed<br>
+      3. Claude extracts vendor name, invoice no, dates, amounts, and line items (Item Code, Part No, Dwg No, Lot No, Qty) — saved to the "Vendor Invoices" Google Sheet, one row per line item<br>
+      4. Click <b>Refresh</b> above to pull the latest rows from the Sheet immediately, without waiting for the next page load<br>
+      5. Rows marked <b>Review Required</b> mean extraction failed or was incomplete — open the PDF and fill in the sheet manually<br>
+      6. If the same vendor + invoice number is found twice (e.g. forwarded in duplicate), the second copy is highlighted amber in the Sheet but <b>not shown here</b> — only the first one is published to this tab
     </div>
   </div>
 
@@ -4116,33 +4117,22 @@ async function loadVendorInvoices() {
   }
 }
 
-// Manually trigger the Gmail scan from the dashboard ("Scan Now" button).
-// Calls the same backend function the time-based trigger calls every 15 min —
-// scans all 3 mailboxes (mptmanufacturing@gmail.com, mptadmin2020@gmail.com,
-// dominick.han@mikuronpteltd.com) via domain-wide delegation.
+// "Refresh" button on Tab 7. mptmanufacturing@gmail.com and
+// mptadmin2020@gmail.com forward their mail to dominick.han@mikuronpteltd.com,
+// which runs the actual Apps Script scan on a 15-minute schedule and writes
+// new rows into the "Vendor Invoices" Google Sheet. The dashboard itself
+// can't trigger that scan directly on demand, so this button simply re-reads
+// the Sheet immediately, in case a scan already ran in the background since
+// the page was last loaded.
 async function scanVendorInvoicesNow() {
   const btn      = document.getElementById('vendorScanBtn');
   const statusEl = document.getElementById('vendorScanStatus');
   if (btn) btn.disabled = true;
-  if (statusEl) statusEl.textContent = 'Scanning 3 mailboxes — this can take a few minutes for PDF extraction across all accounts...';
+  if (statusEl) statusEl.textContent = 'Refreshing from the Vendor Invoices sheet...';
   try {
-    // 3 mailboxes × Claude vision calls can run long. Apps Script itself has a
-    // hard 6-minute execution ceiling per request, so this timeout is set just
-    // under that — if a scan is genuinely larger than that, it will be cut off
-    // server-side and should be re-run (already-scanned emails are skipped via
-    // Gmail label, so re-running is always safe and just continues where it left off).
-    const json = await jsonpCall({ action: 'scan_vendor_invoices' }, 340000);
-    if (json.status === 'ok') {
-      if (statusEl) statusEl.textContent =
-        `✅ Scan complete — ${json.processed || 0} new invoice(s) processed` +
-        (json.duplicates ? `, ${json.duplicates} duplicate(s) flagged (not shown below)` : '') +
-        (json.failed ? `, ${json.failed} failed extraction (flagged for review)` : '');
-      await loadVendorInvoices(); // refresh the table with the new rows
-    } else {
-      if (statusEl) statusEl.textContent = '⚠ Scan error: ' + (json.message || 'Unknown error');
-    }
+    await loadVendorInvoices(); // re-reads the sheet; loadVendorInvoices sets its own status text on success
   } catch(e) {
-    if (statusEl) statusEl.textContent = '⚠ Scan failed or timed out: ' + e.message + ' — it may still be running in the background (Apps Script keeps going even if the dashboard gives up waiting). Click Scan Now again in a minute; already-processed emails are skipped automatically.';
+    if (statusEl) statusEl.textContent = '⚠ Refresh failed: ' + e.message;
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -4199,7 +4189,7 @@ function renderVendorInvoiceTab() {
     '<div class="summary-card"><div class="num">SGD ' + totalAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div><div class="label">Total Value</div></div>';
 
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8">No vendor invoices found. Click "Scan Now" to check for new emails.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8">No vendor invoices found yet. Scans automatically every 15 minutes — click Refresh to check for new results.</td></tr>';
     return;
   }
 
@@ -4222,7 +4212,7 @@ function renderVendorInvoiceTab() {
       '</td>' +
       '<td style="padding:10px 12px;">' + escapeHtml(r.invoiceNo || '—') + '</td>' +
       '<td style="padding:10px 12px;">' + escapeHtml(r.invoiceDate || '—') + '</td>' +
-      '<td style="padding:10px 12px;">' + escapeHtml(r.dueDate || '—') + '</td>' +
+      '<td style="padding:10px 12px;">' + escapeHtml(r.paymentDueDate || '—') + '</td>' +
       '<td style="padding:10px 12px;text-align:right;">' + escapeHtml(r.currency || 'SGD') + ' ' + (r.total || 0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) +
         (items.length ? ' <span style="color:var(--muted);font-size:11px;">(' + items.length + ' item' + (items.length !== 1 ? 's' : '') + ')</span>' : '') +
       '</td>' +
@@ -4239,7 +4229,11 @@ function renderVendorInvoiceTab() {
       const price = parseFloat(it.unitPrice) || 0;
       const amt   = it.amount !== undefined && it.amount !== '' ? parseFloat(it.amount) || 0 : qty * price;
       return '<tr>' +
+        '<td style="padding:7px 12px;color:#374151;">' + escapeHtml(it.itemCode || '—') + '</td>' +
         '<td style="padding:7px 12px;color:#374151;">' + escapeHtml(it.description || '—') + '</td>' +
+        '<td style="padding:7px 12px;color:#374151;">' + escapeHtml(it.partNo || '—') + '</td>' +
+        '<td style="padding:7px 12px;color:#374151;">' + escapeHtml(it.dwgNo || '—') + '</td>' +
+        '<td style="padding:7px 12px;color:#374151;">' + escapeHtml(it.lotNo || '—') + '</td>' +
         '<td style="padding:7px 12px;text-align:right;color:#374151;">' + (qty ? qty.toLocaleString() : '—') + '</td>' +
         '<td style="padding:7px 12px;text-align:right;color:#374151;">' + (price ? price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—') + '</td>' +
         '<td style="padding:7px 12px;text-align:right;color:#374151;font-weight:600;">' + (amt ? amt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—') + '</td>' +
@@ -4248,9 +4242,17 @@ function renderVendorInvoiceTab() {
 
     const detailRow = '<tr id="' + rowId + '" style="display:none;background:#f8fafc;">' +
       '<td colspan="7" style="padding:0 12px 12px 36px;">' +
+        '<div style="font-size:11px;color:var(--muted);margin:6px 0 4px;">' +
+          (r.deliveryDate ? 'Delivery Date: <b>' + escapeHtml(r.deliveryDate) + '</b> &nbsp;·&nbsp; ' : '') +
+          (r.creditTerm ? 'Credit Term: <b>' + escapeHtml(r.creditTerm) + '</b>' : '') +
+        '</div>' +
         '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">' +
           '<thead><tr style="color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.03em;">' +
+            '<th style="padding:6px 12px;text-align:left;">Item Code</th>' +
             '<th style="padding:6px 12px;text-align:left;">Description</th>' +
+            '<th style="padding:6px 12px;text-align:left;">Part No</th>' +
+            '<th style="padding:6px 12px;text-align:left;">Dwg No</th>' +
+            '<th style="padding:6px 12px;text-align:left;">Lot No</th>' +
             '<th style="padding:6px 12px;text-align:right;">Qty</th>' +
             '<th style="padding:6px 12px;text-align:right;">Unit Price</th>' +
             '<th style="padding:6px 12px;text-align:right;">Amount</th>' +
