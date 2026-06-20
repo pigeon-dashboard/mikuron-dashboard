@@ -1080,14 +1080,43 @@
       Select vendor invoice(s) below (or send a selection here from Tab 7's "Convert to Payment" button) to generate a Payment Voucher.
     </div>
 
+    <!-- Filter row — narrows which UNPAID invoices "Select all" picks up -->
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:12px 16px;">
+      <div>
+        <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Year</label>
+        <select id="pvFilterYear" onchange="renderPaymentVoucherInvoiceList()" style="padding:7px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">All Years</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Vendor Name</label>
+        <select id="pvFilterVendor" onchange="renderPaymentVoucherInvoiceList()" style="padding:7px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; min-width:220px;">
+          <option value="">All Vendors</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Bill To</label>
+        <select id="pvFilterBillTo" onchange="renderPaymentVoucherInvoiceList()" style="padding:7px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">All Companies</option>
+          <option value="mikuron">Mikuron Precision Pte Ltd</option>
+          <option value="mptmfg">MPT Manufacturing (M) Sdn Bhd</option>
+        </select>
+      </div>
+      <button onclick="clearPvInvoiceFilters()" style="margin-left:auto; padding:8px 14px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-size:13px; align-self:flex-end;">✕ Clear Filters</button>
+    </div>
+
+    <!-- List of unpaid invoices available to select, narrowed by the filters above -->
+    <div id="pvAvailableInvoices" style="margin-bottom:16px;"></div>
+
     <!-- Top action bar -->
     <div class="inv-select-row" id="pvSelectRowTop" style="border-radius:10px; margin-bottom:12px;">
       <input type="checkbox" class="inv-po-checkbox" id="pvSelectAllTop" onchange="togglePvSelectAll(this.checked)">
-      <label for="pvSelectAllTop" style="cursor:pointer; font-weight:600;">Select all unpaid invoices</label>
+      <label for="pvSelectAllTop" style="cursor:pointer; font-weight:600;">Select all matching invoices</label>
       <span id="pvSelectedCountTop" style="font-size:13px; color:var(--muted);">0 items selected</span>
       <span id="pvMultiVendorWarningTop" style="font-size:11px; color:var(--warning); font-weight:600; display:none;">⚠ Multiple vendors selected — will generate separate Payment Vouchers per vendor</span>
       <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
         <button class="generate-btn" onclick="generatePaymentVoucherPDF()" id="genPvBtnTop" disabled>🖨 Create Payment Voucher (PDF)</button>
+        <button onclick="retryPvSave()" id="pvRetrySaveBtn" style="display:none; padding:9px 14px; border:1px solid #fca5a5; border-radius:8px; background:#fee2e2; color:#dc2626; cursor:pointer; font-size:13px; font-weight:600;">⚠ Retry Save to Sheet</button>
       </div>
     </div>
 
@@ -1140,7 +1169,7 @@
     <!-- Bottom action bar -->
     <div class="inv-select-row">
       <input type="checkbox" class="inv-po-checkbox" id="pvSelectAll" onchange="togglePvSelectAll(this.checked)">
-      <label for="pvSelectAll" style="cursor:pointer; font-weight:600;">Select all unpaid invoices</label>
+      <label for="pvSelectAll" style="cursor:pointer; font-weight:600;">Select all matching invoices</label>
       <span id="pvSelectedCount" style="font-size:13px; color:var(--muted);">0 items selected</span>
       <span id="pvMultiVendorWarning" style="font-size:11px; color:var(--warning); font-weight:600; display:none;">⚠ Multiple vendors selected — will generate separate Payment Vouchers per vendor</span>
       <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
@@ -1277,7 +1306,10 @@
         <option value="">All Years</option>
       </select>
       <button class="refresh-btn" onclick="Promise.all([loadVendorInvoices(), loadVendorPayments()]).then(renderVendorSoaTab)">🔄 Refresh</button>
-      <button onclick="exportVendorSoaToExcel()" style="margin-left:auto; padding:9px 14px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-size:13px;">⬇ Export to Excel</button>
+      <div style="margin-left:auto; display:flex; gap:8px;">
+        <button onclick="printVendorSoaPDF()" id="soaPrintBtn" style="padding:9px 14px; border:1px solid #1e3a8a; border-radius:8px; background:#1e3a8a; color:#fff; cursor:pointer; font-size:13px;">🖨 Print SOA (PDF)</button>
+        <button onclick="exportVendorSoaToExcel()" style="padding:9px 14px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-size:13px;">⬇ Export to Excel</button>
+      </div>
     </div>
 
     <div class="summary-cards" id="soaSummaryCards"></div>
@@ -1568,9 +1600,13 @@ function switchTab(tab) {
   if (tab === 'payment') {
     setTimeout(function() {
       if (vendorInvoices.length === 0) {
-        loadVendorInvoices().then(renderPaymentVoucherTab);
+        loadVendorInvoices().then(function() {
+          renderPaymentVoucherTab();
+          renderPaymentVoucherInvoiceList();
+        });
       } else {
         renderPaymentVoucherTab();
+        renderPaymentVoucherInvoiceList();
       }
       loadVendorPayments().then(renderRecentPvList);
     }, 50);
@@ -5023,8 +5059,99 @@ function togglePvBankFields() {
   if (acctWrap) acctWrap.style.display = showBank ? '' : 'none';
 }
 
+// ── TAB 8 INVOICE FILTERS — narrows which unpaid invoices are selectable ──────
+function getPvFilteredUnpaidInvoices() {
+  const yearFilter   = (document.getElementById('pvFilterYear')   || {value:''}).value;
+  const vendorFilter = (document.getElementById('pvFilterVendor') || {value:''}).value;
+  const billToFilter = (document.getElementById('pvFilterBillTo') || {value:''}).value;
+
+  return vendorInvoices.filter(function(r) {
+    if (r.status === 'Paid') return false;
+    if (yearFilter) {
+      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
+      if (!m || m[1] !== yearFilter) return false;
+    }
+    if (vendorFilter && r.vendorName !== vendorFilter) return false;
+    if (billToFilter && resolveBillingEntity(r.billToName) !== billToFilter) return false;
+    return true;
+  });
+}
+
+function populatePvFilterDropdowns() {
+  const unpaid = vendorInvoices.filter(function(r) { return r.status !== 'Paid'; });
+
+  const yearSel = document.getElementById('pvFilterYear');
+  if (yearSel) {
+    const years = new Set();
+    unpaid.forEach(function(r) {
+      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
+      if (m) years.add(m[1]);
+    });
+    const sortedYears = Array.from(years).sort().reverse();
+    const prevVal = yearSel.value;
+    yearSel.innerHTML = '<option value="">All Years</option>' +
+      sortedYears.map(function(y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
+    if (sortedYears.includes(prevVal)) yearSel.value = prevVal;
+  }
+
+  const vendorSel = document.getElementById('pvFilterVendor');
+  if (vendorSel) {
+    const vendors = Array.from(new Set(unpaid.map(function(r) { return r.vendorName; }).filter(Boolean))).sort();
+    const prevVal = vendorSel.value;
+    vendorSel.innerHTML = '<option value="">All Vendors</option>' +
+      vendors.map(function(v) { return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>'; }).join('');
+    if (vendors.includes(prevVal)) vendorSel.value = prevVal;
+  }
+}
+
+function clearPvInvoiceFilters() {
+  ['pvFilterYear','pvFilterVendor','pvFilterBillTo'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderPaymentVoucherInvoiceList();
+}
+
+// Shows the filtered list of unpaid invoices with checkboxes, so the user can
+// pick exactly which ones to pay — narrowed by Year/Vendor/Bill To above.
+function renderPaymentVoucherInvoiceList() {
+  populatePvFilterDropdowns();
+  const container = document.getElementById('pvAvailableInvoices');
+  if (!container) return;
+
+  const rows = getPvFilteredUnpaidInvoices();
+
+  if (rows.length === 0) {
+    container.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;background:#fff;border:1px solid var(--border);border-radius:10px;">No unpaid invoices match these filters.</div>';
+    updatePvSelectionUI();
+    return;
+  }
+
+  rows.sort(function(a, b) { return (b.invoiceDate || '').localeCompare(a.invoiceDate || ''); });
+
+  container.innerHTML = '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;">' +
+    rows.map(function(r) {
+      const key = invKey_(r.vendorName, r.invoiceNo);
+      const checked = vendorPaymentSelection.has(key);
+      return '<label style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--border);font-size:13px;cursor:pointer;">' +
+        '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleVendorInvoiceSelect(\'' + key.replace(/'/g,"\\'") + '\', this.checked); renderPaymentVoucherTab(); updatePvSelectionUI();">' +
+        '<span style="flex:1;">' + escapeHtml(r.vendorName) + ' — ' + escapeHtml(r.invoiceNo) + ' &nbsp;·&nbsp; ' + escapeHtml(r.invoiceDate || '—') + '</span>' +
+        '<b>' + escapeHtml(r.currency || 'SGD') + ' ' + (r.total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</b>' +
+      '</label>';
+    }).join('') +
+  '</div>';
+
+  updatePvSelectionUI();
+}
+
 function togglePvSelectAll(checked) {
-  toggleVendorSelectAll(checked); // same underlying selection Set as Tab 7
+  const filtered = getPvFilteredUnpaidInvoices();
+  filtered.forEach(function(r) {
+    const key = invKey_(r.vendorName, r.invoiceNo);
+    if (checked) vendorPaymentSelection.add(key);
+    else vendorPaymentSelection.delete(key);
+  });
+  renderPaymentVoucherInvoiceList();
   renderPaymentVoucherTab();
 }
 
@@ -5036,6 +5163,13 @@ function updatePvSelectionUI() {
   });
   const multiVendor = vendorsInSelection.size > 1;
 
+  // "Select all" checkbox state is based on the FILTERED set, not every
+  // unpaid invoice globally — so it correctly shows checked/indeterminate
+  // relative to what's actually visible under the current Year/Vendor/Bill To filters.
+  const filtered = getPvFilteredUnpaidInvoices();
+  const filteredKeys = filtered.map(function(r) { return invKey_(r.vendorName, r.invoiceNo); });
+  const filteredSelectedCount = filteredKeys.filter(function(k) { return vendorPaymentSelection.has(k); }).length;
+
   [
     { countId: 'pvSelectedCount',    selAllId: 'pvSelectAll',    warnId: 'pvMultiVendorWarning',    btnId: 'genPvBtn' },
     { countId: 'pvSelectedCountTop', selAllId: 'pvSelectAllTop', warnId: 'pvMultiVendorWarningTop', btnId: 'genPvBtnTop' }
@@ -5043,11 +5177,10 @@ function updatePvSelectionUI() {
     const countEl = document.getElementById(ids.countId);
     if (countEl) countEl.textContent = count + ' item' + (count !== 1 ? 's' : '') + ' selected';
 
-    const unpaidCount = vendorInvoices.filter(function(r) { return r.status !== 'Paid'; }).length;
     const selAll = document.getElementById(ids.selAllId);
     if (selAll) {
-      selAll.checked       = unpaidCount > 0 && count === unpaidCount;
-      selAll.indeterminate = count > 0 && count < unpaidCount;
+      selAll.checked       = filtered.length > 0 && filteredSelectedCount === filtered.length;
+      selAll.indeterminate = filteredSelectedCount > 0 && filteredSelectedCount < filtered.length;
     }
 
     const warn = document.getElementById(ids.warnId);
@@ -5279,26 +5412,31 @@ async function markVendorInvoicesPaid(pvDataArr) {
   // Persist to the backend so it survives a refresh / shows for other users.
   // Compact payload — pvList carries only header-level fields + invoice keys
   // per PV, not full line-item data, to stay well under JSONP's GET URL limit.
-  try {
-    await jsonpCall({
-      action: 'mark_vendor_invoices_paid',
-      pvList: JSON.stringify(pvDataArr.map(function(d) {
-        return {
-          pvNo: d.pv_no, vendorName: d.payeeName, date: d.date, method: d.method,
-          refNo: d.refNo, bankName: d.bankName, bankAcct: d.bankAcct,
-          currency: d.currency, totalAmount: d.totalAmount,
-          billingEntity: d.billingEntity || 'mikuron',
-          invoiceKeys: d.invoices.map(function(inv) { return invKey_(d.payeeName, inv.invoiceNo); })
-        };
-      }))
-    }, 15000);
-  } catch(e) {
-    console.warn('mark_vendor_invoices_paid failed (local state still updated):', e.message);
+  // IMPORTANT: this re-throws on failure (network error OR a {status:'error'}
+  // response from the backend) so the caller can detect and surface it —
+  // previously this caught and swallowed everything, which is why failed
+  // saves were completely invisible to the user.
+  const json = await jsonpCall({
+    action: 'mark_vendor_invoices_paid',
+    pvList: JSON.stringify(pvDataArr.map(function(d) {
+      return {
+        pvNo: d.pv_no, vendorName: d.payeeName, date: d.date, method: d.method,
+        refNo: d.refNo, bankName: d.bankName, bankAcct: d.bankAcct,
+        currency: d.currency, totalAmount: d.totalAmount,
+        billingEntity: d.billingEntity || 'mikuron',
+        invoiceKeys: d.invoices.map(function(inv) { return invKey_(d.payeeName, inv.invoiceNo); })
+      };
+    }))
+  }, 15000);
+  if (!json || json.status !== 'ok') {
+    throw new Error((json && json.message) || 'Backend returned an error with no message');
   }
 }
 
 // ── GENERATE PV PDF — mirrors generateInvoicePDF from Tab 3 ───────────────────
-function generatePaymentVoucherPDF() {
+var lastFailedPvSave = null; // holds pvDataArr if the backend save failed, for retry
+
+async function generatePaymentVoucherPDF() {
   if (vendorPaymentSelection.size === 0) { alert('Please select at least one invoice.'); return; }
   if (isGeneratingPV) { alert('Already generating — please wait.'); return; }
   isGeneratingPV = true;
@@ -5330,10 +5468,29 @@ ${getPrintCSS()}
     win.document.write(combinedHTML);
     win.document.close();
 
-    markVendorInvoicesPaid(pvDataArr); // fire-and-forget — local state updates instantly, backend persists async
-
     document.getElementById('genPvBtn').disabled = true;
     document.getElementById('genPvBtnTop').disabled = true;
+
+    // Await the save — if it fails, the PV exists only as a printed PDF and
+    // in this session's memory, NOT in the Google Sheet, so it will vanish on
+    // reload unless retried. Previously this call was fire-and-forget, which
+    // meant failures were completely silent — exactly the "PV disappears
+    // after a while" symptom. Now any failure surfaces a clear, actionable warning.
+    try {
+      await markVendorInvoicesPaid(pvDataArr);
+      lastFailedPvSave = null;
+      const retryBtn = document.getElementById('pvRetrySaveBtn');
+      if (retryBtn) retryBtn.style.display = 'none';
+    } catch (saveErr) {
+      lastFailedPvSave = pvDataArr;
+      console.error('Payment Voucher save to Sheet FAILED:', saveErr);
+      alert('⚠ The Payment Voucher PDF was generated and printed, BUT it could NOT be saved to the Google Sheet:\n\n' +
+            (saveErr && saveErr.message ? saveErr.message : saveErr) +
+            '\n\nIt will NOT appear in Tab 9 or Vendor SOA, and the invoice(s) will revert to unpaid after a refresh, ' +
+            'unless you click "Retry Save" below before reloading the page.');
+      const retryBtn = document.getElementById('pvRetrySaveBtn');
+      if (retryBtn) retryBtn.style.display = '';
+    }
 
     setTimeout(function() {
       renderPaymentVoucherTab();
@@ -5346,6 +5503,24 @@ ${getPrintCSS()}
           '\n\nThe generation lock has been cleared — you can try again.');
   } finally {
     isGeneratingPV = false;
+  }
+}
+
+// Retries the Sheet save for a PV whose PDF already printed but whose backend
+// save failed. Does NOT re-open the print window — just retries the save.
+async function retryPvSave() {
+  if (!lastFailedPvSave) { alert('Nothing to retry.'); return; }
+  try {
+    await markVendorInvoicesPaid(lastFailedPvSave);
+    lastFailedPvSave = null;
+    const retryBtn = document.getElementById('pvRetrySaveBtn');
+    if (retryBtn) retryBtn.style.display = 'none';
+    alert('✅ Saved successfully. The Payment Voucher now appears in Tab 9 and Vendor SOA.');
+    renderPaymentVoucherTab();
+    renderVendorInvoiceTab();
+    renderRecentPvList();
+  } catch (err) {
+    alert('Retry failed again: ' + (err && err.message ? err.message : err) + '\n\nYou can try once more, or check your network connection / Web App deployment.');
   }
 }
 
@@ -5944,6 +6119,134 @@ function exportVendorSoaToExcel() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Vendor SOA');
   XLSX.writeFile(wb, `Vendor_SOA_${vendorName.replace(/[^a-z0-9]/gi,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// ── PRINT VENDOR SOA AS PDF ─────────────────────────────────────────────────────
+// Letterhead reflects whichever entity(ies) actually billed this vendor — if
+// the vendor was billed by both Mikuron and MPT Mfg, one combined page is
+// printed using Mikuron's letterhead as the primary header (since the
+// statement itself is an internal reconciliation document, not a customer-
+// facing invoice — entity attribution is shown per-row via the section labels
+// instead), with separate sections/subtotals exactly as shown on screen.
+function buildVendorSoaPrintPage(vendorName, yearFilter, ledger) {
+  const totalInvoiced = ledger.reduce(function(s, e) { return s + e.debit; }, 0);
+  const totalPaid     = ledger.reduce(function(s, e) { return s + e.credit; }, 0);
+  const outstanding    = totalInvoiced - totalPaid;
+
+  const entitiesPresent = Array.from(new Set(ledger.map(function(e) { return e.billingEntity || 'mikuron'; })));
+  entitiesPresent.sort(function(a, b) { return a === 'mikuron' ? -1 : (b === 'mikuron' ? 1 : 0); });
+
+  // Use the dominant entity's letterhead — if the vendor was billed by both,
+  // default to Mikuron as the primary letterhead (matches the on-screen
+  // section ordering), with per-section labels making the split clear in the body.
+  const primaryEntity = entitiesPresent[0] || 'mikuron';
+  const letterhead = COMPANY_LETTERHEADS[primaryEntity] || COMPANY_LETTERHEADS.mikuron;
+
+  let bodyRowsHtml = '';
+  entitiesPresent.forEach(function(entity) {
+    const entityEntries = ledger.filter(function(e) { return (e.billingEntity || 'mikuron') === entity; });
+    const entityLabel = entity === 'mptmfg' ? 'MPT Manufacturing (M) Sdn Bhd' : 'Mikuron Precision Pte Ltd';
+
+    if (entitiesPresent.length > 1) {
+      bodyRowsHtml += `<tr style="background:#e5e7eb;"><td colspan="6" style="padding:6px 9px;border:1px solid #d1d5db;font-weight:700;">${escapeHtml(entityLabel)}</td></tr>`;
+    }
+
+    bodyRowsHtml += entityEntries.map(function(e) {
+      const isPayment = e.type === 'Payment';
+      return `<tr style="${isPayment ? 'background:#f0fdf4;' : ''}">
+        <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(e.date)}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(e.type)}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(e.reference)}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${e.debit ? e.debit.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${e.credit ? e.credit.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;font-weight:600;">${e.entityBalance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      </tr>`;
+    }).join('');
+
+    if (entitiesPresent.length > 1) {
+      const subtotalDebit  = entityEntries.reduce(function(s,e){ return s + e.debit; }, 0);
+      const subtotalCredit = entityEntries.reduce(function(s,e){ return s + e.credit; }, 0);
+      const finalBalance = entityEntries[entityEntries.length-1].entityBalance;
+      bodyRowsHtml += `<tr style="font-weight:700;background:#f9fafb;">
+        <td colspan="3" style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${escapeHtml(entityLabel)} Subtotal:</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${subtotalDebit.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${subtotalCredit.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${finalBalance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      </tr>`;
+    }
+  });
+
+  return `<div class="page">
+  <div class="header">
+    <div class="header-logo"><img src="${LOGO_B64}" alt="Company Logo"></div>
+    <div class="company-info">
+      <div class="co-name">${letterhead.name}</div>
+      <div class="co-details">${letterhead.details}</div>
+    </div>
+    <div class="title-box"><h1>STATEMENT OF<br>ACCOUNT</h1></div>
+  </div>
+
+  <div class="info-grid">
+    <div>
+      <b>Vendor:</b><br>
+      ${escapeHtml(vendorName)}
+    </div>
+    <div style="text-align:right;">
+      <b>Period:</b> ${yearFilter ? escapeHtml(yearFilter) : 'All dates'}<br>
+      <b>Statement Date:</b> ${new Date().toLocaleDateString('en-GB')}
+    </div>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;margin-top:16px;">
+    <thead>
+      <tr style="background:#1e3a8a;color:#fff;">
+        <th style="padding:6px 9px;border:1px solid #1e3a8a;text-align:left;">Date</th>
+        <th style="padding:6px 9px;border:1px solid #1e3a8a;text-align:left;">Type</th>
+        <th style="padding:6px 9px;border:1px solid #1e3a8a;text-align:left;">Reference</th>
+        <th style="padding:6px 9px;border:1px solid #1e3a8a;text-align:right;">Debit (Invoice)</th>
+        <th style="padding:6px 9px;border:1px solid #1e3a8a;text-align:right;">Credit (Payment)</th>
+        <th style="padding:6px 9px;border:1px solid #1e3a8a;text-align:right;">Balance</th>
+      </tr>
+    </thead>
+    <tbody>${bodyRowsHtml}</tbody>
+    <tfoot>
+      <tr style="font-weight:700;background:#f3f4f6;">
+        <td colspan="3" style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">Grand Total:</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${totalInvoiced.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${totalPaid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;color:${outstanding > 0 ? '#dc2626' : '#15803d'};">${outstanding.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div style="margin-top:24px;font-size:11px;color:#6b7280;">
+    This statement is generated for internal reconciliation purposes. Please verify against the vendor's own statement and report any discrepancies.
+  </div>
+</div>`;
+}
+
+function printVendorSoaPDF() {
+  const vendorName = (document.getElementById('soaVendorSelect') || {value:''}).value;
+  const yearFilter  = (document.getElementById('soaYearFilter') || {value:''}).value;
+  if (!vendorName) { alert('Please select a vendor first.'); return; }
+
+  const ledger = buildVendorSoaLedger(vendorName, yearFilter);
+  if (ledger.length === 0) { alert('No data to print for this vendor.'); return; }
+
+  const pageHtml = buildVendorSoaPrintPage(vendorName, yearFilter, ledger);
+  const combinedHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>SOA ${vendorName} — ${new Date().toLocaleDateString('en-GB')}</title>
+${getPrintCSS()}
+<script>
+  document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+  window.addEventListener('load', function() { setTimeout(function() { window.print(); }, 400); });
+<\/script>
+</head><body>${pageHtml}</body></html>`;
+
+  const win = window.open('', '_blank', 'width=950,height=750');
+  if (!win) { alert('Please allow pop-ups for this site to print the Statement of Account.'); return; }
+  win.document.write(combinedHTML);
+  win.document.close();
 }
 
 // Saves invoice to local register immediately, then to Google Drive via JSONP
