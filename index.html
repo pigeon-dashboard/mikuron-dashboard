@@ -480,6 +480,7 @@
     <button class="tab-btn" id="tabBtnRegister" onclick="switchTab('register')">Invoice Register <span id="registerBadge" style="background:#065f46;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
     <button class="tab-btn" id="tabBtnReview" onclick="switchTab('review')">⚠ Review Queue <span id="reviewBadge" style="background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
     <button class="tab-btn" id="tabBtnVendor" onclick="switchTab('vendor')">📥 Vendor Invoices <span id="vendorBadge" style="background:#7c3aed;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
+    <button class="tab-btn" id="tabBtnPayment" onclick="switchTab('payment')">💳 Vendor Payments <span id="paymentBadge" style="background:#0d9488;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
   </div>
 
   <!-- ===================== TAB 1: SALES ORDERS ===================== -->
@@ -938,26 +939,66 @@
       Vendor invoices sent to <b>mptmanufacturing@gmail.com</b> or <b>mptadmin2020@gmail.com</b> (both forwarded to <b>dominick.han@mikuronpteltd.com</b>), extracted automatically.
     </div>
 
-    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
       <button class="refresh-btn" id="vendorScanBtn" onclick="scanVendorInvoicesNow()">🔄 Refresh</button>
       <span id="vendorScanStatus" style="font-size:12px; color:var(--muted);"></span>
-      <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <select id="vendorStatusFilter" onchange="renderVendorInvoiceTab()" style="padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <option value="">All Statuses</option>
-          <option value="New">New</option>
-          <option value="Review Required">Review Required</option>
-          <option value="Reviewed">Reviewed</option>
-        </select>
-        <input type="text" id="vendorSearch" placeholder="Search vendor or invoice no..." oninput="renderVendorInvoiceTab()" style="padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; width:220px;">
+      <button onclick="toggleVendorFilterPanel()" id="vendorFilterToggleBtn" style="margin-left:auto; padding:8px 14px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:6px;">
+        <span id="vendorFilterCaret">▶</span> Filters <span id="vendorActiveFilterCount" style="display:none; background:#7c3aed; color:#fff; border-radius:10px; padding:1px 7px; font-size:11px;"></span>
+      </button>
+    </div>
+
+    <!-- Collapsible filter panel -->
+    <div id="vendorFilterPanel" style="display:none; background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:16px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:12px;">
+        <div>
+          <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Year</label>
+          <select id="vendorYearFilter" onchange="renderVendorInvoiceTab()" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <option value="">All Years</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Status</label>
+          <select id="vendorStatusFilter" onchange="renderVendorInvoiceTab()" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <option value="">All Statuses</option>
+            <option value="New">New</option>
+            <option value="Review Required">Review Required</option>
+            <option value="Reviewed">Reviewed</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Vendor Name</label>
+          <select id="vendorNameFilter" onchange="renderVendorInvoiceTab()" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <option value="">All Vendors</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Due Date From</label>
+          <input type="date" id="vendorDueDateFrom" onchange="renderVendorInvoiceTab()" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Due Date To</label>
+          <input type="date" id="vendorDueDateTo" onchange="renderVendorInvoiceTab()" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; box-sizing:border-box;">
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input type="text" id="vendorSearch" placeholder="Search vendor, invoice no, item code, description..." oninput="renderVendorInvoiceTab()" style="flex:1; min-width:240px; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <button onclick="clearVendorFilters()" style="padding:9px 14px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-size:13px; white-space:nowrap;">✕ Clear Filters</button>
       </div>
     </div>
 
     <div class="summary-cards" id="vendorSummaryCards"></div>
 
-    <div id="vendorTableWrap" style="overflow-x:auto; margin-top:16px;">
-      <table id="vendorTable" style="width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:13px;">
+    <div style="display:flex; align-items:center; gap:10px; padding:10px 16px; background:#f8fafc; border:1px solid var(--border); border-radius:10px 10px 0 0; margin-top:16px; flex-wrap:wrap;">
+      <input type="checkbox" id="vendorSelectAll" onchange="toggleVendorSelectAll(this.checked)">
+      <label for="vendorSelectAll" style="cursor:pointer; font-weight:600; font-size:13px;">Select all (unpaid only)</label>
+      <span id="vendorSelectedCount" style="font-size:13px; color:var(--muted);">0 selected</span>
+      <button class="generate-btn" id="vendorToPaymentBtn" onclick="goToPaymentVoucherTab()" disabled style="margin-left:auto;">💳 Convert to Payment →</button>
+    </div>
+    <div id="vendorTableWrap" style="overflow-x:auto;">
+      <table id="vendorTable" style="width:100%;border-collapse:collapse;background:#fff;border-radius:0 0 10px 10px;overflow:hidden;font-size:13px;">
         <thead>
           <tr style="background:#7c3aed;color:#fff;">
+            <th style="padding:10px 12px;text-align:center; width:36px;"></th>
             <th style="padding:10px 12px;text-align:left">Vendor</th>
             <th style="padding:10px 12px;text-align:left">Invoice No</th>
             <th style="padding:10px 12px;text-align:left">Invoice Date</th>
@@ -968,7 +1009,7 @@
           </tr>
         </thead>
         <tbody id="vendorTableBody">
-          <tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8">Loading...</td></tr>
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:#94a3b8">Loading...</td></tr>
         </tbody>
       </table>
     </div>
@@ -981,6 +1022,91 @@
       4. Click <b>Refresh</b> above to pull the latest rows from the Sheet immediately, without waiting for the next page load<br>
       5. Rows marked <b>Review Required</b> mean extraction failed or was incomplete — open the PDF and fill in the sheet manually<br>
       6. If the same vendor + invoice number is found twice (e.g. forwarded in duplicate), the second copy is highlighted amber in the Sheet but <b>not shown here</b> — only the first one is published to this tab
+    </div>
+  </div>
+
+  <!-- TAB 8: VENDOR PAYMENTS — select unpaid vendor invoices from Tab 7, generate
+       a Payment Voucher (PV) PDF, record payment in the "Vendor Payments" sheet,
+       and mark the source invoice(s) as Paid. Mirrors Tab 3's Invoice + DO flow. -->
+  <div class="tab-panel" id="panelPayment">
+    <div class="page-subtitle" style="margin-bottom:14px;">
+      Select vendor invoice(s) below (or send a selection here from Tab 7's "Convert to Payment" button) to generate a Payment Voucher.
+    </div>
+
+    <!-- Top action bar -->
+    <div class="inv-select-row" id="pvSelectRowTop" style="border-radius:10px; margin-bottom:12px;">
+      <input type="checkbox" class="inv-po-checkbox" id="pvSelectAllTop" onchange="togglePvSelectAll(this.checked)">
+      <label for="pvSelectAllTop" style="cursor:pointer; font-weight:600;">Select all unpaid invoices</label>
+      <span id="pvSelectedCountTop" style="font-size:13px; color:var(--muted);">0 items selected</span>
+      <span id="pvMultiVendorWarningTop" style="font-size:11px; color:var(--warning); font-weight:600; display:none;">⚠ Multiple vendors selected — will generate separate Payment Vouchers per vendor</span>
+      <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <button class="generate-btn" onclick="generatePaymentVoucherPDF()" id="genPvBtnTop" disabled>🖨 Create Payment Voucher (PDF)</button>
+      </div>
+    </div>
+
+    <!-- Payment config fields -->
+    <div class="inv-config" id="pvConfig">
+      <div>
+        <label>PV No (MPT/PV/) — auto-increments each download</label>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <span style="font-size:13px; color:var(--muted); white-space:nowrap;">MPT/PV/</span>
+          <input type="number" id="pvNo" value="1001" min="1" step="1" style="width:90px;">
+        </div>
+      </div>
+      <div>
+        <label>Payment Date</label>
+        <input type="date" id="pvDate" value="">
+      </div>
+      <div>
+        <label>Payment Method</label>
+        <select id="pvMethod" onchange="togglePvBankFields()">
+          <option value="Bank Transfer">Bank Transfer</option>
+          <option value="Cheque">Cheque</option>
+          <option value="Cash">Cash</option>
+        </select>
+      </div>
+      <div>
+        <label>Reference No. <span style="font-weight:400; color:var(--muted);">(cheque no. / transaction ref.)</span></label>
+        <input type="text" id="pvRefNo" placeholder="e.g. CHQ001234 or TXN-REF">
+      </div>
+      <div id="pvBankNameWrap">
+        <label>Payee Bank Name</label>
+        <input type="text" id="pvBankName" placeholder="e.g. DBS Bank Ltd">
+      </div>
+      <div id="pvBankAcctWrap">
+        <label>Payee Bank Account No.</label>
+        <input type="text" id="pvBankAcct" placeholder="e.g. 0123456789">
+      </div>
+      <div style="grid-column: span 2;">
+        <label>Payee Name <span style="font-weight:400; color:var(--muted);">(auto-fills from selected vendor)</span></label>
+        <input type="text" id="pvPayeeName" placeholder="Vendor company name">
+      </div>
+      <div style="grid-column: span 2;">
+        <label>Remarks</label>
+        <input type="text" id="pvRemarks" placeholder="Optional notes for this payment">
+      </div>
+    </div>
+
+    <!-- Invoice groups selected for payment -->
+    <div id="pvGroups" style="margin-bottom:16px;"></div>
+
+    <!-- Bottom action bar -->
+    <div class="inv-select-row">
+      <input type="checkbox" class="inv-po-checkbox" id="pvSelectAll" onchange="togglePvSelectAll(this.checked)">
+      <label for="pvSelectAll" style="cursor:pointer; font-weight:600;">Select all unpaid invoices</label>
+      <span id="pvSelectedCount" style="font-size:13px; color:var(--muted);">0 items selected</span>
+      <span id="pvMultiVendorWarning" style="font-size:11px; color:var(--warning); font-weight:600; display:none;">⚠ Multiple vendors selected — will generate separate Payment Vouchers per vendor</span>
+      <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <button class="generate-btn" onclick="generatePaymentVoucherPDF()" id="genPvBtn" disabled>🖨 Create Payment Voucher (PDF)</button>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;padding:14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;font-size:13px;color:#374151;">
+      <b>How this works:</b><br>
+      1. Select unpaid invoices above (or use "Convert to Payment →" from Tab 7 to bring a selection here)<br>
+      2. Fill in payment date, method, reference no., and payee bank details<br>
+      3. Click <b>Create Payment Voucher (PDF)</b> — generates one PV per vendor if multiple vendors are selected<br>
+      4. Selected invoices are marked <b>Paid</b> in the "Vendor Invoices" sheet and recorded in the "Vendor Payments" sheet — they'll no longer appear as unpaid on Tab 7 or Tab 8
     </div>
   </div>
 
@@ -1049,20 +1175,26 @@ const invoiceHistory = [];
 const lineItemDelivered = {};
 var invoiceRegister  = [];           // all invoices generated this session
 var vendorInvoices   = [];           // vendor invoices auto-extracted from email (Tab 7)
+// Tab 7 -> Tab 8 selection: keys are vendorName.toLowerCase()+'||'+invoiceNo.toLowerCase()
+var vendorPaymentSelection = new Set();
+var pvDeliveryAmounts = {}; // optional partial-payment override per invoice key (future use, mirrors invDeliveryQtys pattern)
+var isGeneratingPV = false;  // guard against double-clicks / duplicate PV generation
+var vendorPaymentHistory = []; // populated after a PV is generated, used for any future revise/cancel flow
 let selectedInvNos  = new Set();    // for mark-as-paid / SOA in register tab
 var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwBCsnDBGB6ElcS-XYLjLQ6T8VrMS2DRWfq821hmw4SPnyBUNmol8y_gTaYNEYAWY7a6w/exec'; // hardcoded — also overridable from Tab 5 Settings
 let _jsonpSeq        = 0;            // JSONP callback sequence
 var nextInvNumber    = 6228;         // auto-incrementing invoice number, starts after last used (6227)
 var isGeneratingInvoice = false;     // guard against double-clicks / duplicate generation
 // ── VERSION STAMP ─────────────────────────────────────────────────────────────
-var DASHBOARD_VERSION = 'v5-vendor-invoices-2026-06-19';
+var DASHBOARD_VERSION = 'v6-tab7-filters-tab8-payments-2026-06-20';
 console.log('%c✅ Work Order Dashboard ' + DASHBOARD_VERSION + ' loaded', 'background:#16a34a;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 // Self-test: confirm the critical functions exist
 window.addEventListener('DOMContentLoaded', function() {
-  var missing = ['updateInvSelectionUI','toggleInvItem','toggleInvPO','toggleInvSelectAll','setInvQty','resetInvLock','assignInvNos','buildInvoiceDataPerPO','recordInvoiceAndUpdateStatus','loadVendorInvoices','scanVendorInvoicesNow','renderVendorInvoiceTab']
+  var missing = ['updateInvSelectionUI','toggleInvItem','toggleInvPO','toggleInvSelectAll','setInvQty','resetInvLock','assignInvNos','buildInvoiceDataPerPO','recordInvoiceAndUpdateStatus','loadVendorInvoices','scanVendorInvoicesNow','renderVendorInvoiceTab','renderPaymentVoucherTab','generatePaymentVoucherPDF','toggleVendorInvoiceSelect']
     .filter(function(fn){ return typeof window[fn] !== 'function'; });
   if (!document.getElementById('genPdfBtnTop')) missing.push('#genPdfBtnTop (top action bar HTML)');
   if (!document.getElementById('panelVendor')) missing.push('#panelVendor (Tab 7 HTML)');
+  if (!document.getElementById('panelPayment')) missing.push('#panelPayment (Tab 8 HTML)');
   if (missing.length) {
     console.error('❌ MISSING FUNCTIONS:', missing.join(', '));
     document.body.insertAdjacentHTML('afterbegin',
@@ -1184,7 +1316,7 @@ function onForexOverride(val) {
 
 function switchTab(tab) {
   currentTab = tab;
-  ['sales','subcon','invoice','outstanding','register','review','vendor'].forEach(t => {
+  ['sales','subcon','invoice','outstanding','register','review','vendor','payment'].forEach(t => {
     const btn   = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
     const panel = document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1));
     if (btn)   btn.classList.toggle('active', t === tab);
@@ -1209,6 +1341,15 @@ function switchTab(tab) {
         loadVendorInvoices();
       } else {
         renderVendorInvoiceTab();
+      }
+    }, 50);
+  }
+  if (tab === 'payment') {
+    setTimeout(function() {
+      if (vendorInvoices.length === 0) {
+        loadVendorInvoices().then(renderPaymentVoucherTab);
+      } else {
+        renderPaymentVoucherTab();
       }
     }, 50);
   }
@@ -1351,6 +1492,7 @@ async function loadData(manual) {
     // count here from already-loaded data, not a full re-fetch, to avoid an
     // extra JSONP round trip on every single Refresh Now click.
     safeCall('updateVendorBadge',      function() { updateVendorBadge(); });
+    safeCall('updatePaymentBadge',     function() { updatePaymentBadge(); });
 
   } catch(fatalErr) {
     // Should never reach here since all sub-calls are wrapped, but just in case
@@ -4147,20 +4289,153 @@ function updateVendorBadge() {
   }
 }
 
+function updatePaymentBadge() {
+  const badge = document.getElementById('paymentBadge');
+  if (badge) {
+    const count = vendorPaymentSelection.size;
+    badge.textContent = count > 0 ? count : '';
+    badge.style.display = count > 0 ? 'inline' : 'none';
+  }
+}
+
+function populateVendorFilterDropdowns() {
+  // Year dropdown — derived from Invoice Date across all loaded invoices
+  const yearSel = document.getElementById('vendorYearFilter');
+  if (yearSel) {
+    const years = new Set();
+    vendorInvoices.forEach(function(r) {
+      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
+      if (m) years.add(m[1]);
+    });
+    const sortedYears = Array.from(years).sort().reverse();
+    const prevVal = yearSel.value;
+    yearSel.innerHTML = '<option value="">All Years</option>' +
+      sortedYears.map(function(y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
+    if (sortedYears.includes(prevVal)) yearSel.value = prevVal;
+  }
+
+  // Vendor Name dropdown — derived from distinct vendor names
+  const vendorSel = document.getElementById('vendorNameFilter');
+  if (vendorSel) {
+    const vendors = Array.from(new Set(vendorInvoices.map(function(r) { return r.vendorName; }).filter(Boolean))).sort();
+    const prevVal = vendorSel.value;
+    vendorSel.innerHTML = '<option value="">All Vendors</option>' +
+      vendors.map(function(v) { return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>'; }).join('');
+    if (vendors.includes(prevVal)) vendorSel.value = prevVal;
+  }
+}
+
+function toggleVendorFilterPanel() {
+  const panel = document.getElementById('vendorFilterPanel');
+  const caret = document.getElementById('vendorFilterCaret');
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if (caret) caret.textContent = isOpen ? '▶' : '▼';
+}
+
+function clearVendorFilters() {
+  ['vendorYearFilter','vendorStatusFilter','vendorNameFilter'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  ['vendorDueDateFrom','vendorDueDateTo','vendorSearch'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderVendorInvoiceTab();
+}
+
+function updateVendorFilterCount() {
+  const ids = ['vendorYearFilter','vendorStatusFilter','vendorNameFilter','vendorDueDateFrom','vendorDueDateTo','vendorSearch'];
+  const activeCount = ids.filter(function(id) {
+    const el = document.getElementById(id);
+    return el && el.value;
+  }).length;
+  const badge = document.getElementById('vendorActiveFilterCount');
+  if (badge) {
+    badge.textContent = activeCount;
+    badge.style.display = activeCount > 0 ? 'inline' : 'none';
+  }
+}
+
+function invKey_(vendorName, invoiceNo) {
+  return (vendorName || '').trim().toLowerCase() + '||' + (invoiceNo || '').trim().toLowerCase();
+}
+
+function toggleVendorInvoiceSelect(key, checked) {
+  if (checked) vendorPaymentSelection.add(key);
+  else vendorPaymentSelection.delete(key);
+  updateVendorPaymentSelectionUI();
+}
+
+function toggleVendorSelectAll(checked) {
+  const unpaidRows = vendorInvoices.filter(function(r) { return r.status !== 'Paid'; });
+  if (checked) {
+    unpaidRows.forEach(function(r) { vendorPaymentSelection.add(invKey_(r.vendorName, r.invoiceNo)); });
+  } else {
+    unpaidRows.forEach(function(r) { vendorPaymentSelection.delete(invKey_(r.vendorName, r.invoiceNo)); });
+  }
+  renderVendorInvoiceTab();
+}
+
+function updateVendorPaymentSelectionUI() {
+  const count = vendorPaymentSelection.size;
+  const countEl = document.getElementById('vendorSelectedCount');
+  if (countEl) countEl.textContent = count + ' selected';
+  const btn = document.getElementById('vendorToPaymentBtn');
+  if (btn) btn.disabled = count === 0;
+
+  const selAll = document.getElementById('vendorSelectAll');
+  const unpaidCount = vendorInvoices.filter(function(r) { return r.status !== 'Paid'; }).length;
+  if (selAll) {
+    selAll.checked = unpaidCount > 0 && count === unpaidCount;
+    selAll.indeterminate = count > 0 && count < unpaidCount;
+  }
+  updatePaymentBadge();
+}
+
+function goToPaymentVoucherTab() {
+  switchTab('payment');
+}
+
 function renderVendorInvoiceTab() {
   updateVendorBadge();
+  populateVendorFilterDropdowns();
+  updateVendorFilterCount();
 
   const summaryEl = document.getElementById('vendorSummaryCards');
   const tbody     = document.getElementById('vendorTableBody');
   if (!summaryEl || !tbody) return;
 
-  const statusFilter = (document.getElementById('vendorStatusFilter') || {value:''}).value;
+  const yearFilter    = (document.getElementById('vendorYearFilter') || {value:''}).value;
+  const statusFilter  = (document.getElementById('vendorStatusFilter') || {value:''}).value;
+  const vendorFilter  = (document.getElementById('vendorNameFilter') || {value:''}).value;
+  const dueDateFrom   = (document.getElementById('vendorDueDateFrom') || {value:''}).value; // yyyy-mm-dd
+  const dueDateTo     = (document.getElementById('vendorDueDateTo') || {value:''}).value;
   const search        = ((document.getElementById('vendorSearch') || {value:''}).value || '').toLowerCase();
 
+  function ddmmyyyyToISO(s) {
+    const m = (s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    return m ? (m[3] + '-' + m[2] + '-' + m[1]) : '';
+  }
+
   let rows = vendorInvoices.filter(function(r) {
+    if (yearFilter) {
+      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
+      if (!m || m[1] !== yearFilter) return false;
+    }
     if (statusFilter && r.status !== statusFilter) return false;
+    if (vendorFilter && r.vendorName !== vendorFilter) return false;
+    if (dueDateFrom || dueDateTo) {
+      const iso = ddmmyyyyToISO(r.paymentDueDate);
+      if (!iso) return false; // exclude undated rows when a date filter is active
+      if (dueDateFrom && iso < dueDateFrom) return false;
+      if (dueDateTo   && iso > dueDateTo)   return false;
+    }
     if (search) {
-      const hay = (r.vendorName + ' ' + r.invoiceNo).toLowerCase();
+      const itemHay = (r.lineItems || []).map(function(it) { return (it.itemCode||'') + ' ' + (it.description||''); }).join(' ');
+      const hay = (r.vendorName + ' ' + r.invoiceNo + ' ' + itemHay).toLowerCase();
       if (hay.indexOf(search) === -1) return false;
     }
     return true;
@@ -4188,24 +4463,34 @@ function renderVendorInvoiceTab() {
     '<div class="summary-card"><div class="num" style="color:' + (reviewCount > 0 ? '#dc2626' : 'inherit') + '">' + reviewCount + '</div><div class="label">Review Required</div></div>' +
     '<div class="summary-card"><div class="num">SGD ' + totalAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div><div class="label">Total Value</div></div>';
 
+  updateVendorPaymentSelectionUI();
+
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8">No vendor invoices found yet. Scans automatically every 15 minutes — click Refresh to check for new results.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#94a3b8">No vendor invoices match these filters.</td></tr>';
     return;
   }
 
   tbody.innerHTML = rows.map(function(r) {
     const isReview = r.status === 'Review Required';
+    const isPaid   = r.status === 'Paid';
     const statusBadge = isReview
       ? '<span class="badge" style="background:#fee2e2;color:#dc2626;">Review Required</span>'
-      : r.status === 'Reviewed'
-        ? '<span class="badge" style="background:#dcfce7;color:#15803d;">Reviewed</span>'
-        : '<span class="badge" style="background:#dbeafe;color:#1d4ed8;">New</span>';
-    const rowStyle = isReview ? ' style="background:#fff8f8"' : '';
+      : isPaid
+        ? '<span class="badge" style="background:#dcfce7;color:#15803d;">Paid</span>'
+        : r.status === 'Reviewed'
+          ? '<span class="badge" style="background:#dcfce7;color:#15803d;">Reviewed</span>'
+          : '<span class="badge" style="background:#dbeafe;color:#1d4ed8;">New</span>';
+    const rowStyle = isReview ? ' style="background:#fff8f8"' : (isPaid ? ' style="background:#f0fdf4"' : '');
     const items = Array.isArray(r.lineItems) ? r.lineItems : [];
+    const key = invKey_(r.vendorName, r.invoiceNo);
     const rowId = 'vendorRow_' + (r.fileId || r.invoiceNo || Math.random().toString(36).slice(2));
+    const checked = vendorPaymentSelection.has(key);
 
     const mainRow = '<tr' + rowStyle + ' style="cursor:' + (items.length ? 'pointer' : 'default') + '" ' +
         (items.length ? 'onclick="toggleVendorLineItems(\'' + rowId + '\')"' : '') + '>' +
+      '<td style="padding:10px 12px;text-align:center;" onclick="event.stopPropagation()">' +
+        (isPaid ? '' : '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleVendorInvoiceSelect(\'' + key.replace(/'/g,"\\'") + '\', this.checked)">') +
+      '</td>' +
       '<td style="padding:10px 12px;">' +
         (items.length ? '<span id="' + rowId + '_caret" style="display:inline-block;width:14px;color:var(--muted);">▶</span> ' : '<span style="display:inline-block;width:14px;"></span> ') +
         escapeHtml(r.vendorName || '—') +
@@ -4241,7 +4526,7 @@ function renderVendorInvoiceTab() {
     }).join('');
 
     const detailRow = '<tr id="' + rowId + '" style="display:none;background:#f8fafc;">' +
-      '<td colspan="7" style="padding:0 12px 12px 36px;">' +
+      '<td colspan="8" style="padding:0 12px 12px 36px;">' +
         '<div style="font-size:11px;color:var(--muted);margin:6px 0 4px;">' +
           (r.deliveryDate ? 'Delivery Date: <b>' + escapeHtml(r.deliveryDate) + '</b> &nbsp;·&nbsp; ' : '') +
           (r.creditTerm ? 'Credit Term: <b>' + escapeHtml(r.creditTerm) + '</b>' : '') +
@@ -4282,6 +4567,336 @@ function escapeHtml(str) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 8: VENDOR PAYMENTS (Payment Voucher generator)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function togglePvBankFields() {
+  const method = (document.getElementById('pvMethod') || {value:'Bank Transfer'}).value;
+  const showBank = method === 'Bank Transfer';
+  const nameWrap = document.getElementById('pvBankNameWrap');
+  const acctWrap = document.getElementById('pvBankAcctWrap');
+  if (nameWrap) nameWrap.style.display = showBank ? '' : 'none';
+  if (acctWrap) acctWrap.style.display = showBank ? '' : 'none';
+}
+
+function togglePvSelectAll(checked) {
+  toggleVendorSelectAll(checked); // same underlying selection Set as Tab 7
+  renderPaymentVoucherTab();
+}
+
+function updatePvSelectionUI() {
+  const count = vendorPaymentSelection.size;
+  const vendorsInSelection = new Set();
+  vendorInvoices.forEach(function(r) {
+    if (vendorPaymentSelection.has(invKey_(r.vendorName, r.invoiceNo))) vendorsInSelection.add(r.vendorName);
+  });
+  const multiVendor = vendorsInSelection.size > 1;
+
+  [
+    { countId: 'pvSelectedCount',    selAllId: 'pvSelectAll',    warnId: 'pvMultiVendorWarning',    btnId: 'genPvBtn' },
+    { countId: 'pvSelectedCountTop', selAllId: 'pvSelectAllTop', warnId: 'pvMultiVendorWarningTop', btnId: 'genPvBtnTop' }
+  ].forEach(function(ids) {
+    const countEl = document.getElementById(ids.countId);
+    if (countEl) countEl.textContent = count + ' item' + (count !== 1 ? 's' : '') + ' selected';
+
+    const unpaidCount = vendorInvoices.filter(function(r) { return r.status !== 'Paid'; }).length;
+    const selAll = document.getElementById(ids.selAllId);
+    if (selAll) {
+      selAll.checked       = unpaidCount > 0 && count === unpaidCount;
+      selAll.indeterminate = count > 0 && count < unpaidCount;
+    }
+
+    const warn = document.getElementById(ids.warnId);
+    if (warn) warn.style.display = multiVendor ? '' : 'none';
+
+    const btn = document.getElementById(ids.btnId);
+    if (btn) btn.disabled = count === 0;
+  });
+
+  // Auto-fill Payee Name if exactly one vendor is selected
+  if (vendorsInSelection.size === 1) {
+    const nameEl = document.getElementById('pvPayeeName');
+    if (nameEl && !nameEl.dataset.userEdited) nameEl.value = Array.from(vendorsInSelection)[0];
+  }
+}
+
+function renderPaymentVoucherTab() {
+  const container = document.getElementById('pvGroups');
+  if (!container) return;
+
+  // Group SELECTED (and unpaid) invoices by vendor
+  const selected = vendorInvoices.filter(function(r) {
+    return r.status !== 'Paid' && vendorPaymentSelection.has(invKey_(r.vendorName, r.invoiceNo));
+  });
+
+  updatePvSelectionUI();
+
+  if (selected.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:40px;text-align:center;color:#94a3b8;background:#fff;border-radius:10px;">' +
+      'No invoices selected. Go to <b>Vendor Invoices</b> tab, tick the invoices you want to pay, then click "Convert to Payment →".' +
+      '</div>';
+    return;
+  }
+
+  const byVendor = {};
+  const vendorOrder = [];
+  selected.forEach(function(r) {
+    if (!byVendor[r.vendorName]) { byVendor[r.vendorName] = []; vendorOrder.push(r.vendorName); }
+    byVendor[r.vendorName].push(r);
+  });
+
+  container.innerHTML = vendorOrder.map(function(vendorName) {
+    const invs = byVendor[vendorName];
+    const vendorTotal = invs.reduce(function(s, r) { return s + (r.total || 0); }, 0);
+    const rowsHtml = invs.map(function(r) {
+      const key = invKey_(r.vendorName, r.invoiceNo);
+      return '<div style="display:flex;justify-content:space-between;padding:8px 16px;border-top:1px solid var(--border);font-size:13px;">' +
+        '<span>' + escapeHtml(r.invoiceNo || '—') + ' &nbsp;·&nbsp; ' + escapeHtml(r.invoiceDate || '—') +
+          (r.paymentDueDate ? ' &nbsp;·&nbsp; Due: ' + escapeHtml(r.paymentDueDate) : '') + '</span>' +
+        '<span style="display:flex;align-items:center;gap:10px;">' +
+          '<b>' + escapeHtml(r.currency || 'SGD') + ' ' + (r.total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</b>' +
+          '<button onclick="toggleVendorInvoiceSelect(\'' + key.replace(/'/g,"\\'") + '\', false); renderPaymentVoucherTab();" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:12px;">Remove</button>' +
+        '</span>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="inv-group" style="margin-bottom:14px;background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;">' +
+      '<div style="padding:12px 16px;background:#0d9488;color:#fff;display:flex;justify-content:space-between;align-items:center;font-weight:600;">' +
+        '<span>📦 ' + escapeHtml(vendorName) + '</span>' +
+        '<span>' + invs.length + ' invoice' + (invs.length!==1?'s':'') + ' · SGD ' + vendorTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</span>' +
+      '</div>' +
+      rowsHtml +
+    '</div>';
+  }).join('');
+}
+
+// ── PV NUMBER ASSIGNMENT (mirrors assignInvNos from Tab 3) ────────────────────
+function assignPvNos(count) {
+  const startEl = document.getElementById('pvNo');
+  let start = parseInt(startEl && startEl.value, 10);
+  if (isNaN(start) || start < 1) start = 1;
+  const nums = [];
+  for (let i = 0; i < count; i++) nums.push(start + i);
+  if (startEl) startEl.value = start + count;
+  return nums;
+}
+
+// ── BUILD PV DATA — one object per vendor ──────────────────────────────────────
+function buildPvDataPerVendor(preassignedNums) {
+  const selected = vendorInvoices.filter(function(r) {
+    return r.status !== 'Paid' && vendorPaymentSelection.has(invKey_(r.vendorName, r.invoiceNo));
+  });
+  if (selected.length === 0) return [];
+
+  const date       = document.getElementById('pvDate').value || new Date().toISOString().slice(0,10);
+  const method     = document.getElementById('pvMethod').value || 'Bank Transfer';
+  const refNo      = document.getElementById('pvRefNo').value.trim();
+  const bankName   = document.getElementById('pvBankName').value.trim();
+  const bankAcct   = document.getElementById('pvBankAcct').value.trim();
+  const remarks    = document.getElementById('pvRemarks').value.trim();
+
+  const byVendor = {};
+  const vendorOrder = [];
+  selected.forEach(function(r) {
+    if (!byVendor[r.vendorName]) { byVendor[r.vendorName] = []; vendorOrder.push(r.vendorName); }
+    byVendor[r.vendorName].push(r);
+  });
+
+  return vendorOrder.map(function(vendorName, idx) {
+    const invs = byVendor[vendorName];
+    const totalAmount = invs.reduce(function(s, r) { return s + (r.total || 0); }, 0);
+    return {
+      pv_no: preassignedNums[idx],
+      date: date,
+      method: method,
+      refNo: refNo,
+      bankName: bankName,
+      bankAcct: bankAcct,
+      payeeName: vendorName,
+      remarks: remarks,
+      currency: invs[0].currency || 'SGD',
+      totalAmount: totalAmount,
+      invoices: invs.map(function(r) {
+        return { invoiceNo: r.invoiceNo, invoiceDate: r.invoiceDate, total: r.total, currency: r.currency };
+      })
+    };
+  });
+}
+
+// ── BUILD ONE PV PRINT PAGE ─────────────────────────────────────────────────────
+function buildPaymentVoucherPDFPage(d) {
+  const invoiceRowsHtml = d.invoices.map(function(inv) {
+    return `<tr>
+      <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(inv.invoiceNo || '—')}</td>
+      <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(inv.invoiceDate || '—')}</td>
+      <td style="padding:8px;border:1px solid #ddd;text-align:right;">${escapeHtml(inv.currency||'SGD')} ${(inv.total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="page">
+  <div class="header">
+    <div class="header-logo"><img src="${LOGO_B64}" alt="Mikuron Logo"></div>
+    <div class="company-info">
+      <div class="co-name">Mikuron Precision <span>Pte Ltd</span></div>
+      <div class="co-details">
+        48 Toh Guan Road East, #05-149,<br>
+        Enterprise hub, Singapore 608586.<br>
+        Tel : 65-9022 2093 &nbsp;|&nbsp; Email : dominick.han@mikuronpteltd.com<br>
+        Co Reg / GST No. : 201408668Z
+      </div>
+    </div>
+    <div class="title-box"><h1>PAYMENT VOUCHER</h1></div>
+  </div>
+
+  <div class="info-grid">
+    <div>
+      <b>Pay To:</b><br>
+      ${escapeHtml(d.payeeName)}
+    </div>
+    <div style="text-align:right;">
+      <b>PV No:</b> MPT/PV/${d.pv_no}<br>
+      <b>Date:</b> ${escapeHtml(d.date)}<br>
+      <b>Payment Method:</b> ${escapeHtml(d.method)}<br>
+      ${d.refNo ? `<b>Reference No:</b> ${escapeHtml(d.refNo)}<br>` : ''}
+      ${d.method === 'Bank Transfer' && d.bankName ? `<b>Bank:</b> ${escapeHtml(d.bankName)}<br>` : ''}
+      ${d.method === 'Bank Transfer' && d.bankAcct ? `<b>Account No:</b> ${escapeHtml(d.bankAcct)}<br>` : ''}
+    </div>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;margin-top:20px;">
+    <thead>
+      <tr style="background:#0d9488;color:#fff;">
+        <th style="padding:8px;border:1px solid #ddd;text-align:left;">Invoice No</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:left;">Invoice Date</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:right;">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${invoiceRowsHtml}</tbody>
+    <tfoot>
+      <tr style="font-weight:700;">
+        <td colspan="2" style="padding:8px;border:1px solid #ddd;text-align:right;">Total Amount Paid:</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:right;">${escapeHtml(d.currency)} ${d.totalAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  ${d.remarks ? `<div style="margin-top:16px;font-size:13px;"><b>Remarks:</b> ${escapeHtml(d.remarks)}</div>` : ''}
+
+  <div style="display:flex;justify-content:space-between;margin-top:60px;">
+    <div style="text-align:center;width:200px;">
+      <div style="border-top:1px solid #333;padding-top:6px;">Prepared By</div>
+    </div>
+    <div style="text-align:center;width:200px;">
+      <div style="border-top:1px solid #333;padding-top:6px;">Approved By</div>
+    </div>
+    <div style="text-align:center;width:200px;">
+      <div style="border-top:1px solid #333;padding-top:6px;">Received By</div>
+    </div>
+  </div>
+</div>`;
+}
+
+// ── MARK PAID — updates the Vendor Invoices sheet status via the Web App ───────
+// NOTE: jsonpCall is GET-only (script-tag JSONP), so the payload here is kept
+// deliberately small — just the invoice keys plus a compact PV reference per
+// vendor, NOT full line-item/invoice data (the backend already has that in
+// the Sheet and can look it up by key). Sending the full nested objects here
+// risks exceeding browser/server URL length limits for vendors with many
+// outstanding invoices being paid at once.
+async function markVendorInvoicesPaid(pvDataArr) {
+  const allKeys = [];
+  const pvRefByKey = {}; // key -> "MPT/PV/1001"
+  pvDataArr.forEach(function(d) {
+    const pvRef = 'MPT/PV/' + d.pv_no;
+    d.invoices.forEach(function(inv) {
+      const k = invKey_(d.payeeName, inv.invoiceNo);
+      allKeys.push(k);
+      pvRefByKey[k] = pvRef;
+    });
+  });
+
+  // Update local state immediately for instant UI feedback
+  vendorInvoices.forEach(function(r) {
+    const k = invKey_(r.vendorName, r.invoiceNo);
+    if (allKeys.indexOf(k) !== -1) r.status = 'Paid';
+  });
+  allKeys.forEach(function(k) { vendorPaymentSelection.delete(k); });
+
+  // Persist to the backend so it survives a refresh / shows for other users.
+  // Compact payload: just keys + a short PV reference string + payment date.
+  const paymentDate = document.getElementById('pvDate').value || '';
+  try {
+    await jsonpCall({
+      action: 'mark_vendor_invoices_paid',
+      keys: JSON.stringify(allKeys),
+      pvRefs: JSON.stringify(allKeys.map(function(k) { return pvRefByKey[k]; })),
+      paymentDate: paymentDate
+    }, 15000);
+  } catch(e) {
+    console.warn('mark_vendor_invoices_paid failed (local state still updated):', e.message);
+  }
+}
+
+// ── GENERATE PV PDF — mirrors generateInvoicePDF from Tab 3 ───────────────────
+function generatePaymentVoucherPDF() {
+  if (vendorPaymentSelection.size === 0) { alert('Please select at least one invoice.'); return; }
+  if (isGeneratingPV) { alert('Already generating — please wait.'); return; }
+  isGeneratingPV = true;
+
+  try {
+    const vendorCount = new Set(
+      vendorInvoices
+        .filter(function(r) { return vendorPaymentSelection.has(invKey_(r.vendorName, r.invoiceNo)); })
+        .map(function(r) { return r.vendorName; })
+    ).size;
+    if (vendorCount === 0) { alert('Nothing to generate.'); return; }
+
+    const preassignedNums = assignPvNos(vendorCount);
+    const pvDataArr = buildPvDataPerVendor(preassignedNums);
+    if (pvDataArr.length === 0) { alert('Nothing to generate.'); return; }
+
+    const combinedBody = pvDataArr.map(function(d) { return buildPaymentVoucherPDFPage(d); }).join('\n');
+    const combinedHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Payment Vouchers — ${new Date().toLocaleDateString('en-GB')}</title>
+${getPrintCSS()}
+<script>
+  document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+  window.addEventListener('load', function() { setTimeout(function() { window.print(); }, 400); });
+<\/script>
+</head><body>${combinedBody}</body></html>`;
+
+    const win = window.open('', '_blank', 'width=950,height=750');
+    if (!win) { alert('Please allow pop-ups for this site to print payment vouchers.'); return; }
+    win.document.write(combinedHTML);
+    win.document.close();
+
+    markVendorInvoicesPaid(pvDataArr); // fire-and-forget — local state updates instantly, backend persists async
+
+    document.getElementById('genPvBtn').disabled = true;
+    document.getElementById('genPvBtnTop').disabled = true;
+
+    setTimeout(function() {
+      renderPaymentVoucherTab();
+      renderVendorInvoiceTab();
+    }, 300);
+  } catch (err) {
+    console.error('generatePaymentVoucherPDF failed:', err);
+    alert('Payment Voucher generation failed: ' + (err && err.message ? err.message : err) +
+          '\n\nThe generation lock has been cleared — you can try again.');
+  } finally {
+    isGeneratingPV = false;
+  }
+}
+
+// Set default PV date to today on load
+(function initPvDate() {
+  document.addEventListener('DOMContentLoaded', function() {
+    const el = document.getElementById('pvDate');
+    if (el && !el.value) el.value = new Date().toISOString().slice(0,10);
+  });
+})();
 
 // Saves invoice to local register immediately, then to Google Drive via JSONP
 async function saveInvoiceToRegisterAndDrive(data, invNo, htmlContent) {
