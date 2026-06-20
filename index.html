@@ -2291,6 +2291,14 @@ setTimeout(() => { updateOutstandingBadge(); }, 2000);
 // Load vendor invoices in the background so the Tab 7 badge count is accurate
 // immediately, without forcing the user to click into Tab 7 first.
 setTimeout(() => { loadVendorInvoices(); }, 2500);
+// Load the Invoice Register (Tab 5) and Vendor Payments (Tab 8/9/10) in the
+// background too — previously these only loaded once the user clicked into
+// those tabs, which made it look like invoices/payments generated in an
+// earlier session had "disappeared" on a fresh page load, when in fact they
+// were saved correctly in the Sheet the whole time and just hadn't been
+// fetched back into the page yet.
+setTimeout(() => { loadInvoiceRegister(); }, 3000);
+setTimeout(() => { loadVendorPayments(); }, 3500);
 // Restore saved Web App URL from localStorage (overrides hardcoded if user set a different one)
 (function() {
   var saved;
