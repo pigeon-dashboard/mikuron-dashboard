@@ -481,6 +481,8 @@
     <button class="tab-btn" id="tabBtnReview" onclick="switchTab('review')">⚠ Review Queue <span id="reviewBadge" style="background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
     <button class="tab-btn" id="tabBtnVendor" onclick="switchTab('vendor')">📥 Vendor Invoices <span id="vendorBadge" style="background:#7c3aed;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
     <button class="tab-btn" id="tabBtnPayment" onclick="switchTab('payment')">💳 Vendor Payments <span id="paymentBadge" style="background:#0d9488;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
+    <button class="tab-btn" id="tabBtnPvList" onclick="switchTab('pvlist')">📋 PV Listing</button>
+    <button class="tab-btn" id="tabBtnVendorSoa" onclick="switchTab('vendorsoa')">📊 Vendor SOA</button>
   </div>
 
   <!-- ===================== TAB 1: SALES ORDERS ===================== -->
@@ -1108,6 +1110,149 @@
       3. Click <b>Create Payment Voucher (PDF)</b> — generates one PV per vendor if multiple vendors are selected<br>
       4. Selected invoices are marked <b>Paid</b> in the "Vendor Invoices" sheet and recorded in the "Vendor Payments" sheet — they'll no longer appear as unpaid on Tab 7 or Tab 8
     </div>
+
+    <!-- Recent Payment Vouchers — Cancel / Revise, same pattern as Tab 5 Invoice Register -->
+    <div style="margin-top:24px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <h3 style="margin:0; font-size:15px;">Recent Payment Vouchers</h3>
+        <button onclick="loadVendorPayments().then(renderRecentPvList)" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-size:12px;">🔄 Refresh</button>
+        <div id="pvActionBtns" style="margin-left:auto; display:flex; gap:8px;">
+          <button class="export-btn" onclick="cancelSelectedPaymentVoucher()" id="cancelPvBtn" disabled style="background:#fee2e2; color:#dc2626; border-color:#fca5a5;">✕ Cancel PV</button>
+          <button class="export-btn" onclick="reviseSelectedPaymentVoucher()" id="revisePvBtn" disabled style="background:#fef3c7; color:#b45309; border-color:#fcd34d;">↺ Revise PV</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:13px;">
+          <thead>
+            <tr style="background:#0f172a;color:#fff;">
+              <th style="padding:8px 12px;text-align:center;width:36px;"></th>
+              <th style="padding:8px 12px;text-align:left;">PV Ref</th>
+              <th style="padding:8px 12px;text-align:left;">Vendor</th>
+              <th style="padding:8px 12px;text-align:left;">Date</th>
+              <th style="padding:8px 12px;text-align:left;">Method</th>
+              <th style="padding:8px 12px;text-align:left;">Invoice Nos</th>
+              <th style="padding:8px 12px;text-align:right;">Amount</th>
+              <th style="padding:8px 12px;text-align:center;">Status</th>
+            </tr>
+          </thead>
+          <tbody id="recentPvTableBody">
+            <tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 9: PAYMENT VOUCHER MASTER LISTING — reads the "Vendor Payments" sheet,
+       same filter pattern as Tab 7/Tab 8 (Year, Status, Vendor, Date range, search). -->
+  <div class="tab-panel" id="panelPvlist">
+    <div class="page-subtitle" style="margin-bottom:14px;">
+      Master listing of every Payment Voucher generated, active and cancelled.
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+      <button class="refresh-btn" onclick="loadVendorPayments().then(renderPvListingTab)">🔄 Refresh</button>
+      <button onclick="togglePvListFilterPanel()" id="pvListFilterToggleBtn" style="margin-left:auto; padding:8px 14px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:6px;">
+        <span id="pvListFilterCaret">▶</span> Filters <span id="pvListActiveFilterCount" style="display:none; background:#0d9488; color:#fff; border-radius:10px; padding:1px 7px; font-size:11px;"></span>
+      </button>
+    </div>
+
+    <div id="pvListFilterPanel" style="display:none; background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:16px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:12px;">
+        <div>
+          <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Year</label>
+          <select id="pvListYearFilter" onchange="renderPvListingTab()" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <option value="">All Years</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Status</label>
+          <select id="pvListStatusFilter" onchange="renderPvListingTab()" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <option value="">All Statuses</option>
+            <option value="Active">Active</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Vendor Name</label>
+          <select id="pvListVendorFilter" onchange="renderPvListingTab()" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <option value="">All Vendors</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Date From</label>
+          <input type="date" id="pvListDateFrom" onchange="renderPvListingTab()" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px;">Date To</label>
+          <input type="date" id="pvListDateTo" onchange="renderPvListingTab()" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; box-sizing:border-box;">
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input type="text" id="pvListSearch" placeholder="Search PV ref, vendor, invoice no..." oninput="renderPvListingTab()" style="flex:1; min-width:240px; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <button onclick="clearPvListFilters()" style="padding:9px 14px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-size:13px; white-space:nowrap;">✕ Clear Filters</button>
+      </div>
+    </div>
+
+    <div class="summary-cards" id="pvListSummaryCards"></div>
+
+    <div style="overflow-x:auto; margin-top:16px;">
+      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:13px;">
+        <thead>
+          <tr style="background:#0f172a;color:#fff;">
+            <th style="padding:10px 12px;text-align:left;">PV Ref</th>
+            <th style="padding:10px 12px;text-align:left;">Vendor</th>
+            <th style="padding:10px 12px;text-align:left;">Date</th>
+            <th style="padding:10px 12px;text-align:left;">Method</th>
+            <th style="padding:10px 12px;text-align:left;">Invoice Nos</th>
+            <th style="padding:10px 12px;text-align:right;">Amount</th>
+            <th style="padding:10px 12px;text-align:center;">Status</th>
+          </tr>
+        </thead>
+        <tbody id="pvListTableBody">
+          <tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB 10: VENDOR SOA — per-vendor running ledger combining Tab 7 invoices
+       and Tab 9 payments, for reconciliation against the vendor's own statement. -->
+  <div class="tab-panel" id="panelVendorsoa">
+    <div class="page-subtitle" style="margin-bottom:14px;">
+      Select a vendor to see a running statement of all invoices and payments, for reconciliation.
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+      <select id="soaVendorSelect" onchange="renderVendorSoaTab()" style="padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; min-width:260px;">
+        <option value="">Select a vendor...</option>
+      </select>
+      <select id="soaYearFilter" onchange="renderVendorSoaTab()" style="padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <option value="">All Years</option>
+      </select>
+      <button class="refresh-btn" onclick="Promise.all([loadVendorInvoices(), loadVendorPayments()]).then(renderVendorSoaTab)">🔄 Refresh</button>
+      <button onclick="exportVendorSoaToExcel()" style="margin-left:auto; padding:9px 14px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-size:13px;">⬇ Export to Excel</button>
+    </div>
+
+    <div class="summary-cards" id="soaSummaryCards"></div>
+
+    <div style="overflow-x:auto; margin-top:16px;">
+      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:13px;">
+        <thead>
+          <tr style="background:#1e3a8a;color:#fff;">
+            <th style="padding:10px 12px;text-align:left;">Date</th>
+            <th style="padding:10px 12px;text-align:left;">Type</th>
+            <th style="padding:10px 12px;text-align:left;">Reference</th>
+            <th style="padding:10px 12px;text-align:right;">Debit (Invoice)</th>
+            <th style="padding:10px 12px;text-align:right;">Credit (Payment)</th>
+            <th style="padding:10px 12px;text-align:right;">Balance</th>
+          </tr>
+        </thead>
+        <tbody id="soaTableBody">
+          <tr><td colspan="6" style="text-align:center;padding:40px;color:#94a3b8">Select a vendor above to see their statement.</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
 </div>
@@ -1186,15 +1331,17 @@ let _jsonpSeq        = 0;            // JSONP callback sequence
 var nextInvNumber    = 6228;         // auto-incrementing invoice number, starts after last used (6227)
 var isGeneratingInvoice = false;     // guard against double-clicks / duplicate generation
 // ── VERSION STAMP ─────────────────────────────────────────────────────────────
-var DASHBOARD_VERSION = 'v6-tab7-filters-tab8-payments-2026-06-20';
+var DASHBOARD_VERSION = 'v7-tab8cancel-tab9-tab10-2026-06-20';
 console.log('%c✅ Work Order Dashboard ' + DASHBOARD_VERSION + ' loaded', 'background:#16a34a;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 // Self-test: confirm the critical functions exist
 window.addEventListener('DOMContentLoaded', function() {
-  var missing = ['updateInvSelectionUI','toggleInvItem','toggleInvPO','toggleInvSelectAll','setInvQty','resetInvLock','assignInvNos','buildInvoiceDataPerPO','recordInvoiceAndUpdateStatus','loadVendorInvoices','scanVendorInvoicesNow','renderVendorInvoiceTab','renderPaymentVoucherTab','generatePaymentVoucherPDF','toggleVendorInvoiceSelect']
+  var missing = ['updateInvSelectionUI','toggleInvItem','toggleInvPO','toggleInvSelectAll','setInvQty','resetInvLock','assignInvNos','buildInvoiceDataPerPO','recordInvoiceAndUpdateStatus','loadVendorInvoices','scanVendorInvoicesNow','renderVendorInvoiceTab','renderPaymentVoucherTab','generatePaymentVoucherPDF','toggleVendorInvoiceSelect','cancelSelectedPaymentVoucher','reviseSelectedPaymentVoucher','renderPvListingTab','renderVendorSoaTab']
     .filter(function(fn){ return typeof window[fn] !== 'function'; });
   if (!document.getElementById('genPdfBtnTop')) missing.push('#genPdfBtnTop (top action bar HTML)');
   if (!document.getElementById('panelVendor')) missing.push('#panelVendor (Tab 7 HTML)');
   if (!document.getElementById('panelPayment')) missing.push('#panelPayment (Tab 8 HTML)');
+  if (!document.getElementById('panelPvlist')) missing.push('#panelPvlist (Tab 9 HTML)');
+  if (!document.getElementById('panelVendorsoa')) missing.push('#panelVendorsoa (Tab 10 HTML)');
   if (missing.length) {
     console.error('❌ MISSING FUNCTIONS:', missing.join(', '));
     document.body.insertAdjacentHTML('afterbegin',
@@ -1316,7 +1463,7 @@ function onForexOverride(val) {
 
 function switchTab(tab) {
   currentTab = tab;
-  ['sales','subcon','invoice','outstanding','register','review','vendor','payment'].forEach(t => {
+  ['sales','subcon','invoice','outstanding','register','review','vendor','payment','pvlist','vendorsoa'].forEach(t => {
     const btn   = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
     const panel = document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1));
     if (btn)   btn.classList.toggle('active', t === tab);
@@ -1351,6 +1498,26 @@ function switchTab(tab) {
       } else {
         renderPaymentVoucherTab();
       }
+      loadVendorPayments().then(renderRecentPvList);
+    }, 50);
+  }
+  if (tab === 'pvlist') {
+    setTimeout(function() {
+      if (vendorPaymentHistory.length === 0) {
+        loadVendorPayments().then(renderPvListingTab);
+      } else {
+        renderPvListingTab();
+      }
+    }, 50);
+  }
+  if (tab === 'vendorsoa') {
+    setTimeout(function() {
+      const needInvoices = vendorInvoices.length === 0;
+      const needPayments = vendorPaymentHistory.length === 0;
+      Promise.all([
+        needInvoices ? loadVendorInvoices() : Promise.resolve(),
+        needPayments ? loadVendorPayments() : Promise.resolve()
+      ]).then(renderVendorSoaTab);
     }, 50);
   }
   if (tab === 'register') {
@@ -4531,6 +4698,21 @@ function renderVendorInvoiceTab() {
           (r.deliveryDate ? 'Delivery Date: <b>' + escapeHtml(r.deliveryDate) + '</b> &nbsp;·&nbsp; ' : '') +
           (r.creditTerm ? 'Credit Term: <b>' + escapeHtml(r.creditTerm) + '</b>' : '') +
         '</div>' +
+        (r.billToName || r.billToAddress || r.shipToName || r.shipToAddress ?
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0 12px;font-size:12px;">' +
+            (r.billToName || r.billToAddress ?
+              '<div style="background:#fff;border:1px solid var(--border);border-radius:6px;padding:8px 10px;">' +
+                '<div style="font-weight:600;color:var(--muted);font-size:10px;text-transform:uppercase;margin-bottom:3px;">Bill To</div>' +
+                (r.billToName ? escapeHtml(r.billToName) + '<br>' : '') +
+                (r.billToAddress ? '<span style="color:#64748b;">' + escapeHtml(r.billToAddress) + '</span>' : '') +
+              '</div>' : '<div></div>') +
+            (r.shipToName || r.shipToAddress ?
+              '<div style="background:#fff;border:1px solid var(--border);border-radius:6px;padding:8px 10px;">' +
+                '<div style="font-weight:600;color:var(--muted);font-size:10px;text-transform:uppercase;margin-bottom:3px;">Ship To</div>' +
+                (r.shipToName ? escapeHtml(r.shipToName) + '<br>' : '') +
+                (r.shipToAddress ? '<span style="color:#64748b;">' + escapeHtml(r.shipToAddress) + '</span>' : '') +
+              '</div>' : '<div></div>') +
+          '</div>' : '') +
         '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">' +
           '<thead><tr style="color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.03em;">' +
             '<th style="padding:6px 12px;text-align:left;">Item Code</th>' +
@@ -4807,14 +4989,8 @@ function buildPaymentVoucherPDFPage(d) {
 // outstanding invoices being paid at once.
 async function markVendorInvoicesPaid(pvDataArr) {
   const allKeys = [];
-  const pvRefByKey = {}; // key -> "MPT/PV/1001"
   pvDataArr.forEach(function(d) {
-    const pvRef = 'MPT/PV/' + d.pv_no;
-    d.invoices.forEach(function(inv) {
-      const k = invKey_(d.payeeName, inv.invoiceNo);
-      allKeys.push(k);
-      pvRefByKey[k] = pvRef;
-    });
+    d.invoices.forEach(function(inv) { allKeys.push(invKey_(d.payeeName, inv.invoiceNo)); });
   });
 
   // Update local state immediately for instant UI feedback
@@ -4824,15 +5000,31 @@ async function markVendorInvoicesPaid(pvDataArr) {
   });
   allKeys.forEach(function(k) { vendorPaymentSelection.delete(k); });
 
+  // Keep a local copy too — used so Tab 9 reflects newly-generated PVs
+  // immediately, before the next loadVendorPayments() refresh from the sheet.
+  pvDataArr.forEach(function(d) {
+    vendorPaymentHistory.push({
+      pvRef: 'MPT/PV/' + d.pv_no, vendorName: d.payeeName, date: d.date, method: d.method,
+      refNo: d.refNo, bankName: d.bankName, bankAcct: d.bankAcct, currency: d.currency,
+      totalAmount: d.totalAmount, invoiceNos: d.invoices.map(function(i){return i.invoiceNo;}).join(', '),
+      invoiceCount: d.invoices.length, status: 'Active', recordedAt: new Date().toLocaleString('en-GB')
+    });
+  });
+
   // Persist to the backend so it survives a refresh / shows for other users.
-  // Compact payload: just keys + a short PV reference string + payment date.
-  const paymentDate = document.getElementById('pvDate').value || '';
+  // Compact payload — pvList carries only header-level fields + invoice keys
+  // per PV, not full line-item data, to stay well under JSONP's GET URL limit.
   try {
     await jsonpCall({
       action: 'mark_vendor_invoices_paid',
-      keys: JSON.stringify(allKeys),
-      pvRefs: JSON.stringify(allKeys.map(function(k) { return pvRefByKey[k]; })),
-      paymentDate: paymentDate
+      pvList: JSON.stringify(pvDataArr.map(function(d) {
+        return {
+          pvNo: d.pv_no, vendorName: d.payeeName, date: d.date, method: d.method,
+          refNo: d.refNo, bankName: d.bankName, bankAcct: d.bankAcct,
+          currency: d.currency, totalAmount: d.totalAmount,
+          invoiceKeys: d.invoices.map(function(inv) { return invKey_(d.payeeName, inv.invoiceNo); })
+        };
+      }))
     }, 15000);
   } catch(e) {
     console.warn('mark_vendor_invoices_paid failed (local state still updated):', e.message);
@@ -4880,6 +5072,7 @@ ${getPrintCSS()}
     setTimeout(function() {
       renderPaymentVoucherTab();
       renderVendorInvoiceTab();
+      renderRecentPvList();
     }, 300);
   } catch (err) {
     console.error('generatePaymentVoucherPDF failed:', err);
@@ -4897,6 +5090,444 @@ ${getPrintCSS()}
     if (el && !el.value) el.value = new Date().toISOString().slice(0,10);
   });
 })();
+
+// ── RECENT PAYMENT VOUCHERS (Tab 8) — Cancel / Revise ──────────────────────────
+var selectedPvRefs = new Set(); // which PV row(s) are checked in the Recent PVs table
+
+async function loadVendorPayments() {
+  if (!WEBAPP_URL) return;
+  try {
+    const json = await jsonpCall({ action: 'get_vendor_payments' }, 15000);
+    if (json.status === 'ok') {
+      vendorPaymentHistory = json.records || [];
+    }
+  } catch(e) {
+    console.warn('loadVendorPayments failed:', e.message);
+  }
+  return vendorPaymentHistory;
+}
+
+function renderRecentPvList() {
+  const tbody = document.getElementById('recentPvTableBody');
+  if (!tbody) return;
+
+  // Newest first
+  const rows = vendorPaymentHistory.slice().sort(function(a, b) {
+    return (b.recordedAt || '').localeCompare(a.recordedAt || '');
+  });
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8">No payment vouchers generated yet.</td></tr>';
+    updatePvActionButtons();
+    return;
+  }
+
+  tbody.innerHTML = rows.map(function(r) {
+    const isCancelled = r.status === 'Cancelled';
+    const rowStyle = isCancelled ? ' style="background:#fef2f2;opacity:0.7"' : '';
+    const statusBadge = isCancelled
+      ? '<span class="badge" style="background:#fee2e2;color:#dc2626;">Cancelled</span>'
+      : '<span class="badge" style="background:#dcfce7;color:#15803d;">Active</span>';
+    return '<tr' + rowStyle + '>' +
+      '<td style="padding:8px 12px;text-align:center;">' +
+        (isCancelled ? '' : '<input type="checkbox" ' + (selectedPvRefs.has(r.pvRef) ? 'checked' : '') + ' onchange="togglePvRowSelect(\'' + r.pvRef.replace(/'/g,"\\'") + '\', this.checked)">') +
+      '</td>' +
+      '<td style="padding:8px 12px;font-weight:600;">' + escapeHtml(r.pvRef) + '</td>' +
+      '<td style="padding:8px 12px;">' + escapeHtml(r.vendorName) + '</td>' +
+      '<td style="padding:8px 12px;">' + escapeHtml(r.date) + '</td>' +
+      '<td style="padding:8px 12px;">' + escapeHtml(r.method) + '</td>' +
+      '<td style="padding:8px 12px;">' + escapeHtml(r.invoiceNos) + '</td>' +
+      '<td style="padding:8px 12px;text-align:right;">' + escapeHtml(r.currency||'SGD') + ' ' + (r.totalAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</td>' +
+      '<td style="padding:8px 12px;text-align:center;">' + statusBadge + '</td>' +
+    '</tr>';
+  }).join('');
+
+  updatePvActionButtons();
+}
+
+function togglePvRowSelect(pvRef, checked) {
+  if (checked) selectedPvRefs.add(pvRef);
+  else selectedPvRefs.delete(pvRef);
+  updatePvActionButtons();
+}
+
+function updatePvActionButtons() {
+  const cancelBtn = document.getElementById('cancelPvBtn');
+  const reviseBtn = document.getElementById('revisePvBtn');
+  const count = selectedPvRefs.size;
+  if (cancelBtn) cancelBtn.disabled = count === 0;
+  if (reviseBtn) reviseBtn.disabled = count !== 1; // revise only makes sense for exactly one PV at a time
+}
+
+// ── CANCEL PV ───────────────────────────────────────────────────────────────────
+async function cancelSelectedPaymentVoucher() {
+  if (selectedPvRefs.size === 0) return;
+  const refsArr = Array.from(selectedPvRefs);
+
+  const confirmed = confirm(
+    `Cancel ${refsArr.length > 1 ? refsArr.length + ' payment vouchers' : refsArr[0]}?\n\n` +
+    `This will:\n` +
+    `• Mark the PV(s) as CANCELLED\n` +
+    `• Re-open the affected invoice(s) as unpaid on Tab 7 and Tab 8\n` +
+    `• The invoice(s) can be paid again via a new Payment Voucher\n\n` +
+    `This action cannot be undone.`
+  );
+  if (!confirmed) return;
+
+  for (const pvRef of refsArr) {
+    try {
+      const json = await jsonpCall({ action: 'cancel_vendor_payment', pvRef: pvRef }, 15000);
+      if (json.status === 'ok') {
+        const rec = vendorPaymentHistory.find(function(r) { return r.pvRef === pvRef; });
+        if (rec) rec.status = 'Cancelled';
+      } else {
+        alert('Failed to cancel ' + pvRef + ': ' + (json.message || 'Unknown error'));
+      }
+    } catch(e) {
+      alert('Failed to cancel ' + pvRef + ': ' + e.message);
+    }
+  }
+
+  selectedPvRefs.clear();
+  await loadVendorInvoices();   // refresh so reverted invoices show as unpaid again
+  renderVendorInvoiceTab();
+  renderPaymentVoucherTab();
+  renderRecentPvList();
+
+  alert('Payment Voucher(s) cancelled. Affected invoice(s) are unpaid again on Tab 7 and Tab 8.');
+}
+
+// ── REVISE PV ───────────────────────────────────────────────────────────────────
+// Cancels the selected PV and pre-selects the same invoices in Tab 8's
+// generator so the user can correct payment details and re-generate with a
+// new PV number — same pattern as Tab 5's "Revise Invoice".
+async function reviseSelectedPaymentVoucher() {
+  if (selectedPvRefs.size !== 1) return;
+  const pvRef = Array.from(selectedPvRefs)[0];
+  const rec = vendorPaymentHistory.find(function(r) { return r.pvRef === pvRef; });
+  if (!rec) { alert('Could not find that payment voucher.'); return; }
+
+  // Cancel the original PV first
+  selectedPvRefs.clear();
+  selectedPvRefs.add(pvRef);
+  await cancelSelectedPaymentVoucher();
+
+  // Pre-select the same invoices in Tab 8's generator
+  const invNoList = rec.invoiceNos.split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
+  const normVendor = rec.vendorName.trim().toLowerCase();
+  vendorInvoices.forEach(function(r) {
+    if (r.vendorName.trim().toLowerCase() === normVendor && invNoList.indexOf(r.invoiceNo.trim().toLowerCase()) !== -1) {
+      vendorPaymentSelection.add(invKey_(r.vendorName, r.invoiceNo));
+    }
+  });
+
+  // Pre-fill payment fields from the original PV
+  document.getElementById('pvMethod').value = rec.method || 'Bank Transfer';
+  togglePvBankFields();
+  document.getElementById('pvRefNo').value = rec.refNo || '';
+  document.getElementById('pvBankName').value = rec.bankName || '';
+  document.getElementById('pvBankAcct').value = rec.bankAcct || '';
+  const nameEl = document.getElementById('pvPayeeName');
+  nameEl.value = rec.vendorName;
+  nameEl.dataset.userEdited = '1'; // prevent auto-fill logic from overwriting this
+
+  renderPaymentVoucherTab();
+  renderVendorInvoiceTab();
+
+  alert(`${pvRef} has been cancelled and its invoices are pre-selected here.\nReview the details and click "Create Payment Voucher (PDF)" to generate the revised PV.`);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 9: PAYMENT VOUCHER MASTER LISTING
+// ══════════════════════════════════════════════════════════════════════════════
+
+function togglePvListFilterPanel() {
+  const panel = document.getElementById('pvListFilterPanel');
+  const caret = document.getElementById('pvListFilterCaret');
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if (caret) caret.textContent = isOpen ? '▶' : '▼';
+}
+
+function clearPvListFilters() {
+  ['pvListYearFilter','pvListStatusFilter','pvListVendorFilter'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  ['pvListDateFrom','pvListDateTo','pvListSearch'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderPvListingTab();
+}
+
+function populatePvListFilterDropdowns() {
+  const yearSel = document.getElementById('pvListYearFilter');
+  if (yearSel) {
+    const years = new Set();
+    vendorPaymentHistory.forEach(function(r) {
+      const m = (r.date || '').match(/(\d{4})-\d{2}-\d{2}/) || (r.date || '').match(/\d{2}\/\d{2}\/(\d{4})/);
+      if (m) years.add(m[1]);
+    });
+    const sortedYears = Array.from(years).sort().reverse();
+    const prevVal = yearSel.value;
+    yearSel.innerHTML = '<option value="">All Years</option>' +
+      sortedYears.map(function(y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
+    if (sortedYears.includes(prevVal)) yearSel.value = prevVal;
+  }
+
+  const vendorSel = document.getElementById('pvListVendorFilter');
+  if (vendorSel) {
+    const vendors = Array.from(new Set(vendorPaymentHistory.map(function(r) { return r.vendorName; }).filter(Boolean))).sort();
+    const prevVal = vendorSel.value;
+    vendorSel.innerHTML = '<option value="">All Vendors</option>' +
+      vendors.map(function(v) { return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>'; }).join('');
+    if (vendors.includes(prevVal)) vendorSel.value = prevVal;
+  }
+
+  const badge = document.getElementById('pvListActiveFilterCount');
+  if (badge) {
+    const ids = ['pvListYearFilter','pvListStatusFilter','pvListVendorFilter','pvListDateFrom','pvListDateTo','pvListSearch'];
+    const activeCount = ids.filter(function(id) { const el = document.getElementById(id); return el && el.value; }).length;
+    badge.textContent = activeCount;
+    badge.style.display = activeCount > 0 ? 'inline' : 'none';
+  }
+}
+
+function renderPvListingTab() {
+  populatePvListFilterDropdowns();
+
+  const tbody = document.getElementById('pvListTableBody');
+  const summaryEl = document.getElementById('pvListSummaryCards');
+  if (!tbody || !summaryEl) return;
+
+  const yearFilter   = (document.getElementById('pvListYearFilter') || {value:''}).value;
+  const statusFilter = (document.getElementById('pvListStatusFilter') || {value:''}).value;
+  const vendorFilter = (document.getElementById('pvListVendorFilter') || {value:''}).value;
+  const dateFrom     = (document.getElementById('pvListDateFrom') || {value:''}).value;
+  const dateTo       = (document.getElementById('pvListDateTo') || {value:''}).value;
+  const search       = ((document.getElementById('pvListSearch') || {value:''}).value || '').toLowerCase();
+
+  function toISO(s) {
+    if (!s) return '';
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); // already ISO (yyyy-mm-dd) — from <input type=date>
+    if (m) return s.slice(0,10);
+    m = s.match(/(\d{2})\/(\d{2})\/(\d{4})/); // dd/mm/yyyy
+    return m ? (m[3] + '-' + m[2] + '-' + m[1]) : '';
+  }
+
+  let rows = vendorPaymentHistory.filter(function(r) {
+    if (yearFilter) {
+      const iso = toISO(r.date);
+      if (!iso || iso.slice(0,4) !== yearFilter) return false;
+    }
+    if (statusFilter && r.status !== statusFilter) return false;
+    if (vendorFilter && r.vendorName !== vendorFilter) return false;
+    if (dateFrom || dateTo) {
+      const iso = toISO(r.date);
+      if (!iso) return false;
+      if (dateFrom && iso < dateFrom) return false;
+      if (dateTo   && iso > dateTo)   return false;
+    }
+    if (search) {
+      const hay = (r.pvRef + ' ' + r.vendorName + ' ' + r.invoiceNos).toLowerCase();
+      if (hay.indexOf(search) === -1) return false;
+    }
+    return true;
+  });
+
+  rows.sort(function(a, b) { return (b.recordedAt || '').localeCompare(a.recordedAt || ''); });
+
+  const totalCount    = vendorPaymentHistory.length;
+  const activeCount   = vendorPaymentHistory.filter(function(r) { return r.status !== 'Cancelled'; }).length;
+  const cancelledCount = totalCount - activeCount;
+  const totalAmount   = vendorPaymentHistory
+    .filter(function(r) { return r.status !== 'Cancelled'; })
+    .reduce(function(s, r) { return s + (r.totalAmount || 0); }, 0);
+
+  summaryEl.innerHTML =
+    '<div class="summary-card"><div class="num">' + totalCount + '</div><div class="label">Total PVs</div></div>' +
+    '<div class="summary-card"><div class="num">' + activeCount + '</div><div class="label">Active</div></div>' +
+    '<div class="summary-card"><div class="num" style="color:' + (cancelledCount > 0 ? '#dc2626' : 'inherit') + '">' + cancelledCount + '</div><div class="label">Cancelled</div></div>' +
+    '<div class="summary-card"><div class="num">SGD ' + totalAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div><div class="label">Total Paid (Active)</div></div>';
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8">No payment vouchers match these filters.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(function(r) {
+    const isCancelled = r.status === 'Cancelled';
+    const rowStyle = isCancelled ? ' style="background:#fef2f2;opacity:0.7"' : '';
+    const statusBadge = isCancelled
+      ? '<span class="badge" style="background:#fee2e2;color:#dc2626;">Cancelled</span>'
+      : '<span class="badge" style="background:#dcfce7;color:#15803d;">Active</span>';
+    return '<tr' + rowStyle + '>' +
+      '<td style="padding:10px 12px;font-weight:600;">' + escapeHtml(r.pvRef) + '</td>' +
+      '<td style="padding:10px 12px;">' + escapeHtml(r.vendorName) + '</td>' +
+      '<td style="padding:10px 12px;">' + escapeHtml(r.date) + '</td>' +
+      '<td style="padding:10px 12px;">' + escapeHtml(r.method) + '</td>' +
+      '<td style="padding:10px 12px;">' + escapeHtml(r.invoiceNos) + '</td>' +
+      '<td style="padding:10px 12px;text-align:right;">' + escapeHtml(r.currency||'SGD') + ' ' + (r.totalAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</td>' +
+      '<td style="padding:10px 12px;text-align:center;">' + statusBadge + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 10: VENDOR SOA (reconciliation)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function populateSoaDropdowns() {
+  const vendorSel = document.getElementById('soaVendorSelect');
+  if (vendorSel) {
+    const vendors = Array.from(new Set(vendorInvoices.map(function(r) { return r.vendorName; }).filter(Boolean))).sort();
+    const prevVal = vendorSel.value;
+    vendorSel.innerHTML = '<option value="">Select a vendor...</option>' +
+      vendors.map(function(v) { return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>'; }).join('');
+    if (vendors.includes(prevVal)) vendorSel.value = prevVal;
+  }
+
+  const yearSel = document.getElementById('soaYearFilter');
+  if (yearSel) {
+    const years = new Set();
+    vendorInvoices.forEach(function(r) {
+      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
+      if (m) years.add(m[1]);
+    });
+    const sortedYears = Array.from(years).sort().reverse();
+    const prevVal = yearSel.value;
+    yearSel.innerHTML = '<option value="">All Years</option>' +
+      sortedYears.map(function(y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
+    if (sortedYears.includes(prevVal)) yearSel.value = prevVal;
+  }
+}
+
+function ddmmyyyyToSortableISO_(s) {
+  const m = (s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  return m ? (m[3] + '-' + m[2] + '-' + m[1]) : '0000-00-00';
+}
+
+function buildVendorSoaLedger(vendorName, yearFilter) {
+  const normVendor = vendorName.trim().toLowerCase();
+
+  // Debit entries — one per invoice (Tab 7), excluding cancelled-duplicate-style noise
+  const invEntries = vendorInvoices
+    .filter(function(r) { return r.vendorName.trim().toLowerCase() === normVendor; })
+    .filter(function(r) { return !yearFilter || ddmmyyyyToSortableISO_(r.invoiceDate).slice(0,4) === yearFilter; })
+    .map(function(r) {
+      return {
+        sortKey: ddmmyyyyToSortableISO_(r.invoiceDate),
+        date: r.invoiceDate,
+        type: 'Invoice',
+        reference: r.invoiceNo,
+        debit: r.total || 0,
+        credit: 0
+      };
+    });
+
+  // Credit entries — one per ACTIVE payment voucher covering this vendor (Tab 9)
+  const payEntries = vendorPaymentHistory
+    .filter(function(r) { return r.vendorName.trim().toLowerCase() === normVendor && r.status !== 'Cancelled'; })
+    .filter(function(r) {
+      if (!yearFilter) return true;
+      const m = (r.date || '').match(/^(\d{4})-/) || (r.date || '').match(/\d{2}\/\d{2}\/(\d{4})/);
+      return m && (m[1] || m[0]).slice(0,4) === yearFilter;
+    })
+    .map(function(r) {
+      const iso = /^\d{4}-\d{2}-\d{2}/.test(r.date) ? r.date.slice(0,10) : ddmmyyyyToSortableISO_(r.date);
+      return {
+        sortKey: iso,
+        date: r.date,
+        type: 'Payment',
+        reference: r.pvRef + ' (' + r.invoiceNos + ')',
+        debit: 0,
+        credit: r.totalAmount || 0
+      };
+    });
+
+  const ledger = invEntries.concat(payEntries).sort(function(a, b) { return a.sortKey.localeCompare(b.sortKey); });
+
+  let running = 0;
+  ledger.forEach(function(entry) {
+    running += entry.debit - entry.credit;
+    entry.balance = running;
+  });
+
+  return ledger;
+}
+
+function renderVendorSoaTab() {
+  populateSoaDropdowns();
+
+  const vendorName = (document.getElementById('soaVendorSelect') || {value:''}).value;
+  const yearFilter  = (document.getElementById('soaYearFilter') || {value:''}).value;
+  const tbody = document.getElementById('soaTableBody');
+  const summaryEl = document.getElementById('soaSummaryCards');
+  if (!tbody || !summaryEl) return;
+
+  if (!vendorName) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#94a3b8">Select a vendor above to see their statement.</td></tr>';
+    summaryEl.innerHTML = '';
+    return;
+  }
+
+  const ledger = buildVendorSoaLedger(vendorName, yearFilter);
+
+  const totalInvoiced = ledger.reduce(function(s, e) { return s + e.debit; }, 0);
+  const totalPaid      = ledger.reduce(function(s, e) { return s + e.credit; }, 0);
+  const outstanding     = totalInvoiced - totalPaid;
+
+  summaryEl.innerHTML =
+    '<div class="summary-card"><div class="num">SGD ' + totalInvoiced.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div><div class="label">Total Invoiced</div></div>' +
+    '<div class="summary-card"><div class="num">SGD ' + totalPaid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div><div class="label">Total Paid</div></div>' +
+    '<div class="summary-card"><div class="num" style="color:' + (outstanding > 0 ? '#dc2626' : '#15803d') + '">SGD ' + outstanding.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div><div class="label">Outstanding Balance</div></div>';
+
+  if (ledger.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#94a3b8">No invoices or payments found for this vendor' + (yearFilter ? ' in ' + yearFilter : '') + '.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = ledger.map(function(e) {
+    const isPayment = e.type === 'Payment';
+    return '<tr' + (isPayment ? ' style="background:#f0fdf4"' : '') + '>' +
+      '<td style="padding:8px 12px;">' + escapeHtml(e.date) + '</td>' +
+      '<td style="padding:8px 12px;">' +
+        '<span class="badge" style="background:' + (isPayment ? '#dcfce7;color:#15803d' : '#dbeafe;color:#1d4ed8') + ';">' + e.type + '</span>' +
+      '</td>' +
+      '<td style="padding:8px 12px;">' + escapeHtml(e.reference) + '</td>' +
+      '<td style="padding:8px 12px;text-align:right;">' + (e.debit ? e.debit.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—') + '</td>' +
+      '<td style="padding:8px 12px;text-align:right;">' + (e.credit ? e.credit.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—') + '</td>' +
+      '<td style="padding:8px 12px;text-align:right;font-weight:600;">' + e.balance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function exportVendorSoaToExcel() {
+  const vendorName = (document.getElementById('soaVendorSelect') || {value:''}).value;
+  const yearFilter  = (document.getElementById('soaYearFilter') || {value:''}).value;
+  if (!vendorName) { alert('Please select a vendor first.'); return; }
+
+  const ledger = buildVendorSoaLedger(vendorName, yearFilter);
+  if (ledger.length === 0) { alert('No data to export for this vendor.'); return; }
+
+  const aoa = [
+    ['Vendor Statement of Account: ' + vendorName],
+    [yearFilter ? ('Year: ' + yearFilter) : 'All dates'],
+    [],
+    ['Date', 'Type', 'Reference', 'Debit (Invoice)', 'Credit (Payment)', 'Balance']
+  ];
+  ledger.forEach(function(e) {
+    aoa.push([e.date, e.type, e.reference, e.debit || '', e.credit || '', e.balance]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:12},{wch:10},{wch:30},{wch:16},{wch:16},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Vendor SOA');
+  XLSX.writeFile(wb, `Vendor_SOA_${vendorName.replace(/[^a-z0-9]/gi,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
 
 // Saves invoice to local register immediately, then to Google Drive via JSONP
 async function saveInvoiceToRegisterAndDrive(data, invNo, htmlContent) {
