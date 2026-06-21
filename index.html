@@ -483,6 +483,7 @@
     <button class="tab-btn" id="tabBtnPayment" onclick="switchTab('payment')">💳 Vendor Payments <span id="paymentBadge" style="background:#0d9488;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
     <button class="tab-btn" id="tabBtnPvList" onclick="switchTab('pvlist')">📋 PV Listing</button>
     <button class="tab-btn" id="tabBtnVendorSoa" onclick="switchTab('vendorsoa')">📊 Vendor SOA</button>
+    <button class="tab-btn" id="tabBtnSoaArchive" onclick="switchTab('soaarchive')">🗂️ SOA Filing</button>
   </div>
 
   <!-- ===================== TAB 1: SALES ORDERS ===================== -->
@@ -1333,6 +1334,35 @@
     </div>
   </div>
 
+  <!-- TAB 11: SOA FILING ARCHIVE — organizes the same data behind Tab 10 into
+       a Vendor > Month filing index with totals, purely for record-keeping /
+       browsing. No new data source, no PDF upload — reads vendorInvoices and
+       vendorPaymentHistory exactly like Tab 10 does. -->
+  <div class="tab-panel" id="panelSoaarchive">
+    <div class="page-subtitle" style="margin-bottom:14px;">
+      Filing index of Statements of Account — organized by Vendor, then Month, with totals for record-keeping. Click "View / Print SOA" to open the full statement on the Vendor SOA tab.
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+      <select id="archiveYearFilter" onchange="renderSoaArchiveTab()" style="padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <option value="">All Years</option>
+      </select>
+      <select id="archiveVendorFilter" onchange="renderSoaArchiveTab()" style="padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; min-width:220px;">
+        <option value="">All Vendors</option>
+      </select>
+      <select id="archiveSortBy" onchange="renderSoaArchiveTab()" style="padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <option value="vendor">Sort: Vendor Name (A–Z)</option>
+        <option value="value">Sort: Total Value (High–Low)</option>
+        <option value="outstanding">Sort: Outstanding Balance (High–Low)</option>
+      </select>
+      <button class="refresh-btn" onclick="Promise.all([loadVendorInvoices(), loadVendorPayments()]).then(renderSoaArchiveTab)">🔄 Refresh</button>
+    </div>
+
+    <div class="summary-cards" id="archiveSummaryCards"></div>
+
+    <div id="soaArchiveGroups" style="margin-top:16px;"></div>
+  </div>
+
 </div>
 
 <script>
@@ -1437,11 +1467,11 @@ let _jsonpSeq        = 0;            // JSONP callback sequence
 var nextInvNumber    = 6228;         // auto-incrementing invoice number, starts after last used (6227)
 var isGeneratingInvoice = false;     // guard against double-clicks / duplicate generation
 // ── VERSION STAMP ─────────────────────────────────────────────────────────────
-var DASHBOARD_VERSION = 'v8-multi-entity-billing-2026-06-20';
+var DASHBOARD_VERSION = 'v9-soa-archive-pv-fix-2026-06-21';
 console.log('%c✅ Work Order Dashboard ' + DASHBOARD_VERSION + ' loaded', 'background:#16a34a;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 // Self-test: confirm the critical functions exist
 window.addEventListener('DOMContentLoaded', function() {
-  var missing = ['updateInvSelectionUI','toggleInvItem','toggleInvPO','toggleInvSelectAll','setInvQty','resetInvLock','assignInvNos','buildInvoiceDataPerPO','recordInvoiceAndUpdateStatus','loadVendorInvoices','scanVendorInvoicesNow','renderVendorInvoiceTab','renderPaymentVoucherTab','generatePaymentVoucherPDF','toggleVendorInvoiceSelect','cancelSelectedPaymentVoucher','reviseSelectedPaymentVoucher','renderPvListingTab','renderVendorSoaTab','resolveBillingEntity','generateSubcontractPOPDF','toggleAllVendorLineItems','toggleAllPvListLineItems']
+  var missing = ['updateInvSelectionUI','toggleInvItem','toggleInvPO','toggleInvSelectAll','setInvQty','resetInvLock','assignInvNos','buildInvoiceDataPerPO','recordInvoiceAndUpdateStatus','loadVendorInvoices','scanVendorInvoicesNow','renderVendorInvoiceTab','renderPaymentVoucherTab','generatePaymentVoucherPDF','toggleVendorInvoiceSelect','cancelSelectedPaymentVoucher','reviseSelectedPaymentVoucher','renderPvListingTab','renderVendorSoaTab','resolveBillingEntity','generateSubcontractPOPDF','toggleAllVendorLineItems','toggleAllPvListLineItems','renderSoaArchiveTab','printVendorSoaPDF','retryPvSave']
     .filter(function(fn){ return typeof window[fn] !== 'function'; });
   if (!document.getElementById('genPdfBtnTop')) missing.push('#genPdfBtnTop (top action bar HTML)');
   if (!document.getElementById('panelVendor')) missing.push('#panelVendor (Tab 7 HTML)');
@@ -1569,7 +1599,7 @@ function onForexOverride(val) {
 
 function switchTab(tab) {
   currentTab = tab;
-  ['sales','subcon','invoice','outstanding','register','review','vendor','payment','pvlist','vendorsoa'].forEach(t => {
+  ['sales','subcon','invoice','outstanding','register','review','vendor','payment','pvlist','vendorsoa','soaarchive'].forEach(t => {
     const btn   = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
     const panel = document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1));
     if (btn)   btn.classList.toggle('active', t === tab);
@@ -1629,6 +1659,16 @@ function switchTab(tab) {
         needInvoices ? loadVendorInvoices() : Promise.resolve(),
         needPayments ? loadVendorPayments() : Promise.resolve()
       ]).then(renderVendorSoaTab);
+    }, 50);
+  }
+  if (tab === 'soaarchive') {
+    setTimeout(function() {
+      const needInvoices = vendorInvoices.length === 0;
+      const needPayments = vendorPaymentHistory.length === 0;
+      Promise.all([
+        needInvoices ? loadVendorInvoices() : Promise.resolve(),
+        needPayments ? loadVendorPayments() : Promise.resolve()
+      ]).then(renderSoaArchiveTab);
     }, 50);
   }
   if (tab === 'register') {
@@ -6249,6 +6289,180 @@ ${getPrintCSS()}
   win.document.close();
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 11: SOA FILING ARCHIVE — Vendor > Month filing index, for record-keeping
+// ══════════════════════════════════════════════════════════════════════════════
+
+function populateSoaArchiveFilters() {
+  const yearSel = document.getElementById('archiveYearFilter');
+  if (yearSel) {
+    const years = new Set();
+    vendorInvoices.forEach(function(r) {
+      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
+      if (m) years.add(m[1]);
+    });
+    const sortedYears = Array.from(years).sort().reverse();
+    const prevVal = yearSel.value;
+    yearSel.innerHTML = '<option value="">All Years</option>' +
+      sortedYears.map(function(y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
+    if (sortedYears.includes(prevVal)) yearSel.value = prevVal;
+  }
+
+  const vendorSel = document.getElementById('archiveVendorFilter');
+  if (vendorSel) {
+    const vendors = Array.from(new Set(vendorInvoices.map(function(r) { return r.vendorName; }).filter(Boolean))).sort();
+    const prevVal = vendorSel.value;
+    vendorSel.innerHTML = '<option value="">All Vendors</option>' +
+      vendors.map(function(v) { return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>'; }).join('');
+    if (vendors.includes(prevVal)) vendorSel.value = prevVal;
+  }
+}
+
+// Builds a Vendor > Month filing index from the same data Tab 10 uses —
+// invoices (debit) from vendorInvoices, active payments (credit) from
+// vendorPaymentHistory — grouped by calendar month of the INVOICE date
+// (payments are attributed to the month of the invoice(s) they cover, via
+// matching invoice numbers, so a vendor's "March" folder shows both what was
+// invoiced AND what was paid against those March invoices, even if the
+// payment itself was made in a later month — this matches how a filing
+// cabinet organizes by the invoice's own period, not the payment date).
+function buildSoaArchiveIndex(yearFilter, vendorFilter) {
+  const index = {}; // vendorName -> { monthKey -> {invoiced, paid, count, monthLabel} }
+
+  vendorInvoices.forEach(function(r) {
+    if (vendorFilter && r.vendorName !== vendorFilter) return;
+    const m = (r.invoiceDate || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (!m) return;
+    if (yearFilter && m[3] !== yearFilter) return;
+    const monthKey = m[3] + '-' + m[2];
+    const monthLabel = new Date(parseInt(m[3]), parseInt(m[2])-1, 1).toLocaleDateString('en-GB', { year: 'numeric', month: 'long' });
+
+    if (!index[r.vendorName]) index[r.vendorName] = {};
+    if (!index[r.vendorName][monthKey]) index[r.vendorName][monthKey] = { invoiced: 0, paid: 0, count: 0, monthLabel: monthLabel, currency: r.currency || 'SGD' };
+    index[r.vendorName][monthKey].invoiced += r.total || 0;
+    index[r.vendorName][monthKey].count += 1;
+  });
+
+  // Attribute active payments to the month(s) of the invoices they cover
+  vendorPaymentHistory
+    .filter(function(r) { return r.status !== 'Cancelled'; })
+    .forEach(function(pv) {
+      if (vendorFilter && pv.vendorName !== vendorFilter) return;
+      const invNoList = (pv.invoiceNos || '').split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
+      const normVendor = pv.vendorName.trim().toLowerCase();
+      const coveredInvoices = vendorInvoices.filter(function(r) {
+        return r.vendorName.trim().toLowerCase() === normVendor && invNoList.indexOf(r.invoiceNo.trim().toLowerCase()) !== -1;
+      });
+      if (coveredInvoices.length === 0) return;
+      // Split the PV's total evenly across the months of the invoices it covers
+      const amountPerInvoice = (pv.totalAmount || 0) / coveredInvoices.length;
+      coveredInvoices.forEach(function(r) {
+        const m = (r.invoiceDate || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if (!m) return;
+        if (yearFilter && m[3] !== yearFilter) return;
+        const monthKey = m[3] + '-' + m[2];
+        if (index[pv.vendorName] && index[pv.vendorName][monthKey]) {
+          index[pv.vendorName][monthKey].paid += amountPerInvoice;
+        }
+      });
+    });
+
+  return index;
+}
+
+function renderSoaArchiveTab() {
+  populateSoaArchiveFilters();
+
+  const yearFilter   = (document.getElementById('archiveYearFilter')   || {value:''}).value;
+  const vendorFilter = (document.getElementById('archiveVendorFilter') || {value:''}).value;
+  const sortBy        = (document.getElementById('archiveSortBy')       || {value:'vendor'}).value;
+
+  const container = document.getElementById('soaArchiveGroups');
+  const summaryEl = document.getElementById('archiveSummaryCards');
+  if (!container || !summaryEl) return;
+
+  const index = buildSoaArchiveIndex(yearFilter, vendorFilter);
+  const vendorNames = Object.keys(index);
+
+  if (vendorNames.length === 0) {
+    container.innerHTML = '<div style="padding:40px;text-align:center;color:#94a3b8;background:#fff;border:1px solid var(--border);border-radius:10px;">No SOA data matches these filters.</div>';
+    summaryEl.innerHTML = '';
+    return;
+  }
+
+  // Compute per-vendor totals for summary cards and sorting
+  const vendorTotals = vendorNames.map(function(vendorName) {
+    const months = index[vendorName];
+    let invoiced = 0, paid = 0;
+    Object.keys(months).forEach(function(mk) { invoiced += months[mk].invoiced; paid += months[mk].paid; });
+    return { vendorName: vendorName, invoiced: invoiced, paid: paid, outstanding: invoiced - paid, monthCount: Object.keys(months).length };
+  });
+
+  if (sortBy === 'value') vendorTotals.sort(function(a, b) { return b.invoiced - a.invoiced; });
+  else if (sortBy === 'outstanding') vendorTotals.sort(function(a, b) { return b.outstanding - a.outstanding; });
+  else vendorTotals.sort(function(a, b) { return a.vendorName.localeCompare(b.vendorName); });
+
+  const grandInvoiced = vendorTotals.reduce(function(s, v) { return s + v.invoiced; }, 0);
+  const grandPaid = vendorTotals.reduce(function(s, v) { return s + v.paid; }, 0);
+  const grandOutstanding = grandInvoiced - grandPaid;
+
+  summaryEl.innerHTML =
+    '<div class="summary-card"><div class="num">' + vendorTotals.length + '</div><div class="label">Vendors</div></div>' +
+    '<div class="summary-card"><div class="num">SGD ' + grandInvoiced.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div><div class="label">Total Invoiced</div></div>' +
+    '<div class="summary-card"><div class="num">SGD ' + grandPaid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div><div class="label">Total Paid</div></div>' +
+    '<div class="summary-card"><div class="num" style="color:' + (grandOutstanding > 0 ? '#dc2626' : '#15803d') + '">SGD ' + grandOutstanding.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div><div class="label">Total Outstanding</div></div>';
+
+  container.innerHTML = vendorTotals.map(function(vt) {
+    const months = index[vt.vendorName];
+    const monthKeys = Object.keys(months).sort().reverse(); // newest month first
+    const safeId = 'archive_' + vt.vendorName.replace(/[^a-zA-Z0-9]/g, '_');
+
+    const monthRows = monthKeys.map(function(mk) {
+      const md = months[mk];
+      const outstanding = md.invoiced - md.paid;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;border-top:1px solid var(--border);font-size:13px;">' +
+        '<span>' + escapeHtml(md.monthLabel) + ' &nbsp;<span style="color:var(--muted);font-size:11px;">(' + md.count + ' invoice' + (md.count!==1?'s':'') + ')</span></span>' +
+        '<span style="display:flex;gap:16px;align-items:center;">' +
+          '<span>Invoiced: <b>' + (md.invoiced).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</b></span>' +
+          '<span>Paid: <b>' + (md.paid).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</b></span>' +
+          '<span style="color:' + (outstanding > 0 ? '#dc2626' : '#15803d') + '">Outstanding: <b>' + outstanding.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</b></span>' +
+        '</span>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="inv-group" style="margin-bottom:14px;background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;">' +
+      '<div onclick="toggleSoaArchiveGroup(\'' + safeId + '\')" style="padding:12px 16px;background:#1e3a8a;color:#fff;display:flex;justify-content:space-between;align-items:center;font-weight:600;cursor:pointer;">' +
+        '<span><span id="' + safeId + '_caret">▶</span> 🗂️ ' + escapeHtml(vt.vendorName) + '</span>' +
+        '<span style="display:flex;gap:16px;align-items:center;font-size:13px;">' +
+          '<span>' + vt.monthCount + ' month' + (vt.monthCount!==1?'s':'') + ' on file</span>' +
+          '<span>SGD ' + vt.invoiced.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</span>' +
+          '<button onclick="event.stopPropagation(); openSoaForVendor(\'' + vt.vendorName.replace(/'/g,"\\'") + '\')" style="padding:5px 10px;border:none;border-radius:6px;background:#fff;color:#1e3a8a;cursor:pointer;font-size:12px;font-weight:700;">View / Print SOA</button>' +
+        '</span>' +
+      '</div>' +
+      '<div id="' + safeId + '" style="display:none;">' + monthRows + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function toggleSoaArchiveGroup(safeId) {
+  const el = document.getElementById(safeId);
+  const caret = document.getElementById(safeId + '_caret');
+  if (!el) return;
+  const isOpen = el.style.display !== 'none';
+  el.style.display = isOpen ? 'none' : 'block';
+  if (caret) caret.textContent = isOpen ? '▶' : '▼';
+}
+
+// Jumps to Tab 10 with this vendor pre-selected, so the user can view or print
+// the full running statement instead of just the monthly filing summary.
+function openSoaForVendor(vendorName) {
+  switchTab('vendorsoa');
+  setTimeout(function() {
+    const sel = document.getElementById('soaVendorSelect');
+    if (sel) { sel.value = vendorName; renderVendorSoaTab(); }
+  }, 150);
+}
+
 // Saves invoice to local register immediately, then to Google Drive via JSONP
 async function saveInvoiceToRegisterAndDrive(data, invNo, htmlContent) {
   console.log('[Register] saveInvoiceToRegisterAndDrive called, invNo:', invNo, 'items:', data && data.items && data.items.length);
@@ -6954,10 +7168,26 @@ function renderDOQueue() {
       ? '<div class="card-thumb-icon">📄</div>'
       : '<div class="card-thumb-icon">🖼</div>';
 
+    const detected = Array.isArray(item.detectedDOs) ? item.detectedDOs : [];
+    const detectedHtml = detected.length > 0
+      ? '<div style="margin-top:6px;padding:6px 8px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:11px;text-align:left;">' +
+          '<div style="font-weight:700;color:#92400e;margin-bottom:3px;">🔍 ' + detected.length + ' DO' + (detected.length!==1?'s':'') + ' detected in this scan:</div>' +
+          detected.slice(0, 4).map(function(d) {
+            return '<div style="color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">• ' +
+              (d.doNo ? 'DO ' + escapeHtml(d.doNo) : 'DO #?') +
+              (d.custName ? ' — ' + escapeHtml(d.custName) : '') +
+              (d.hasSignature ? ' ✓' : ' ⚠ no signature seen') +
+            '</div>';
+          }).join('') +
+          (detected.length > 4 ? '<div style="color:#92400e;">+ ' + (detected.length - 4) + ' more...</div>' : '') +
+        '</div>'
+      : '';
+
     return '<div class="do-queue-card" onclick="openDOModal(\'' + item.fileId + '\')">' +
       thumb +
       '<div class="card-name" title="' + (item.fileName||'') + '">' + (item.fileName||'scan') + '</div>' +
       '<div class="card-date">' + (item.scanDate||'') + '</div>' +
+      detectedHtml +
       '<button class="card-assign-btn" onclick="event.stopPropagation();openDOModal(\'' + item.fileId + '\')">📋 Assign to Invoice</button>' +
       '</div>';
   }).join('');
@@ -6982,6 +7212,31 @@ function openDOModal(fileId) {
   const link = document.getElementById('doModalViewLink');
   if (link) { link.href = item.fileUrl || '#'; }
 
+  // Show the full detected-DO list inside the modal (the card only shows a
+  // few) so the user can see exactly what Claude found before searching.
+  const detected = Array.isArray(item.detectedDOs) ? item.detectedDOs : [];
+  let detectedBlock = document.getElementById('doModalDetectedList');
+  if (!detectedBlock) {
+    detectedBlock = document.createElement('div');
+    detectedBlock.id = 'doModalDetectedList';
+    detectedBlock.style.cssText = 'padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;margin-top:8px;text-align:left;';
+    document.getElementById('doModalPreview').insertAdjacentElement('afterend', detectedBlock);
+  }
+  if (detected.length > 0) {
+    detectedBlock.style.display = '';
+    detectedBlock.innerHTML = '<div style="font-weight:700;color:#92400e;margin-bottom:4px;">🔍 ' + detected.length + ' DO' + (detected.length!==1?'s':'') + ' detected in this scan — use these to help find the right invoice(s) below:</div>' +
+      detected.map(function(d) {
+        return '<div style="color:#374151;padding:2px 0;">• ' +
+          (d.doNo ? '<b>DO ' + escapeHtml(d.doNo) + '</b>' : '<b>DO #?</b>') +
+          (d.custName ? ' — ' + escapeHtml(d.custName) : ' — (customer not legible)') +
+          (d.deliveryDate ? ' · ' + escapeHtml(d.deliveryDate) : '') +
+          (d.hasSignature ? ' · ✓ signed' : ' · ⚠ no signature seen') +
+        '</div>';
+      }).join('');
+  } else {
+    detectedBlock.style.display = 'none';
+  }
+
   // Build invoice list — all pending DO invoices (no signedDOUrl yet)
   const assignList = document.getElementById('doAssignList');
   const pending    = invoiceRegister.filter(r => !r.signedDOUrl && !r.signedDOData && r.status !== 'Cancelled');
@@ -6994,7 +7249,11 @@ function openDOModal(fileId) {
 
   document.getElementById('doAssignSelected').style.display = 'none';
   document.getElementById('doAssignConfirmBtn').disabled = true;
-  document.getElementById('doAssignSearch').value = '';
+  // Pre-fill the search box with the first detected customer name, if any —
+  // gives the user a head start instead of starting from a blank search.
+  const firstCustName = detected.length > 0 ? (detected[0].custName || '') : '';
+  document.getElementById('doAssignSearch').value = firstCustName;
+  if (firstCustName) renderAssignList(pending, firstCustName);
 
   const modal = document.getElementById('doAssignModal');
   modal.style.display = 'flex';
