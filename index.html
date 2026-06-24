@@ -8416,4 +8416,223 @@ function exportSOAPDF() {
   }
 })();
 </script>
+<!--
+  ════════════════════════════════════════════════════════════════════════════
+  INVOICE → GOOGLE SHEET (Register + Line Items) + DRIVE PDF   (client side)
+  ════════════════════════════════════════════════════════════════════════════
+
+  ⚠ IMPORTANT — REPLACES the earlier "invoice-pdf-to-drive.html" block.
+     If you pasted invoice-pdf-to-drive.html, DELETE that block first.
+     KEEP the "invoice-reprint.html" block — this one builds on it.
+
+  WHERE TO PASTE:
+  Append at the very END of work-order-dashboard.html, after the Reprint block.
+
+  WHAT IT DOES:
+  On every "Create Invoice + DO (PDF)", for each invoice it:
+    1. Renders the exact Invoice + DO to a real PDF (html2pdf).
+    2. Sends header + line items + PDF to Apps Script in ONE POST
+       (action: save_invoice_record), which writes:
+         • "Invoice Register"   tab → the header row
+         • "Invoice Line Items" tab → one row per line item
+         • Drive                     → the PDF, link written back on the row
+    3. Updates the register row's "Inv PDF" link locally.
+  Also: Reprint falls back to opening the stored Drive PDF when local data is
+  missing, so reprint works for every invoice that has a Drive copy.
+
+  REQUIRES:
+  Add handleSaveInvoiceRecord(...) from AppsScript_save_invoice_record.gs to your
+  InvoiceWebApp_AppsScript.gs, wire it into doPost(), and REDEPLOY the Web App.
+  ════════════════════════════════════════════════════════════════════════════
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+(function () {
+  if (window.__invPersistPatched) { console.warn('Invoice-persist block already loaded — skipping duplicate.'); return; }
+  if (window.__pdfGenPatched) {
+    console.warn('⚠ The old invoice-pdf-to-drive.html block is still in the file. Please remove it — this block replaces it.');
+  }
+
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  function buildPdfDocHTML(pages) {
+    var css = (typeof getPrintCSS === 'function') ? getPrintCSS() : '';
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8">' + css + '</head><body>' + pages + '</body></html>';
+  }
+
+  function blobToBase64(blob) {
+    return new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onload = function () { res(String(fr.result).split(',')[1]); };
+      fr.onerror = rej;
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  // Render one invoice's Invoice+DO pages → PDF blob via offscreen iframe
+  async function renderInvoicePdfBlob(d, printType) {
+    if (typeof html2pdf === 'undefined') throw new Error('html2pdf not loaded');
+    var pages = window.buildInvoicePDFPages(d, printType);   // Bill-To / Ship-To aware
+    var iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;background:#fff;';
+    document.body.appendChild(iframe);
+    var idoc = iframe.contentWindow.document;
+    idoc.open(); idoc.write(buildPdfDocHTML(pages)); idoc.close();
+    await wait(450);
+    try { iframe.style.height = (idoc.body.scrollHeight + 40) + 'px'; } catch (e) {}
+    await wait(60);
+    var opt = {
+      margin: 0,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 794 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'], after: '.page' }
+    };
+    try { return await html2pdf().set(opt).from(idoc.body).outputPdf('blob'); }
+    finally { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }
+  }
+
+  // Build + send one invoice (header + lines + PDF) to Apps Script
+  async function persistInvoice(d, printType) {
+    var items = d.items || [];
+    var subtotal = items.reduce(function (s, i) { return s + ((Number(i.unit_price) || 0) * (Number(i.qty) || 0)); }, 0);
+    var gst   = subtotal * ((Number(d.gst_rate) || 9) / 100);
+    var total = subtotal + gst;
+    var custName = (d.billTo && d.billTo.name) || (d.customer && d.customer.name) || '';
+    var dueDate  = (typeof calcDueDateJS === 'function') ? calcDueDateJS(d.date, d.terms) : '';
+
+    var form = new URLSearchParams();
+    form.append('action',   'save_invoice_record');
+    form.append('invNo',    String(d.inv_no));
+    form.append('custName', custName);
+    form.append('custPO',   d.po_ref || '');
+    form.append('prRef',    d.pr_ref || '');
+    form.append('invDate',  d.date || '');
+    form.append('dueDate',  dueDate || '');
+    form.append('terms',    d.terms || '');
+    form.append('currency', d.currency || 'SGD');
+    form.append('subtotal', String(subtotal));
+    form.append('gst',      String(gst));
+    form.append('total',    String(total));
+    form.append('status',   'Pending');
+    form.append('linesJson', JSON.stringify(items.map(function (i) {
+      return {
+        item: i.item || '', drawingNo: i.drawingNo || '', prNo: i.prNo || '',
+        description: i.description || '', qty: Number(i.qty) || 0,
+        unit_price: Number(i.unit_price) || 0
+      };
+    })));
+
+    // PDF (optional — record still saves if PDF generation fails)
+    try {
+      if (typeof html2pdf !== 'undefined') {
+        var blob = await renderInvoicePdfBlob(d, printType);
+        form.append('fileName', 'MPT-INV-' + d.inv_no + '_' + new Date().toISOString().slice(0, 10) + '.pdf');
+        form.append('mimeType', 'application/pdf');
+        form.append('fileData', await blobToBase64(blob));
+      }
+    } catch (e) { console.error('PDF render failed (record still saved):', e); }
+
+    var resp = await fetch(WEBAPP_URL, { method: 'POST', body: form });
+    var text = await resp.text(), json;
+    try { json = JSON.parse(text); }
+    catch (e) { var m = text.match(/\{[\s\S]*\}/); json = m ? JSON.parse(m[0]) : { status: 'error', message: text.slice(0, 160) }; }
+    return json;
+  }
+
+  async function persistAll(arr) {
+    if (!arr || !arr.length) return;
+    if (typeof WEBAPP_URL === 'undefined' || !WEBAPP_URL) {
+      if (typeof updateRegSyncStatus === 'function') updateRegSyncStatus('error', 'No Web App URL set — invoice not saved to Sheet. Add it in Tab 5 Settings.');
+      return;
+    }
+    var printType = (document.getElementById('printTypeSelect') || {}).value || 'both';
+    for (var i = 0; i < arr.length; i++) {
+      var d = arr[i];
+      try {
+        if (typeof updateRegSyncStatus === 'function')
+          updateRegSyncStatus('loading', 'Saving MPT/INV/' + d.inv_no + ' to Sheet + Drive...');
+        var json = await persistInvoice(d, printType);
+        if (json && json.status === 'ok') {
+          if (typeof invoiceRegister !== 'undefined') {
+            var rec = invoiceRegister.filter(function (r) { return String(r.invNo) === String(d.inv_no); })[0];
+            if (rec) { rec.fileUrl = json.fileUrl || rec.fileUrl; rec.fileId = json.fileId || rec.fileId; }
+          }
+          if (typeof updateRegSyncStatus === 'function')
+            updateRegSyncStatus('ok', 'MPT/INV/' + d.inv_no + ' saved to Sheet + Drive · ' + new Date().toLocaleTimeString());
+        } else {
+          if (typeof updateRegSyncStatus === 'function')
+            updateRegSyncStatus('error', 'Save failed for MPT/INV/' + d.inv_no + ': ' + ((json && json.message) || 'unknown'));
+        }
+      } catch (e) {
+        console.error('persist error', d.inv_no, e);
+        if (typeof updateRegSyncStatus === 'function')
+          updateRegSyncStatus('error', 'Save error for MPT/INV/' + d.inv_no + ': ' + e.message);
+      }
+    }
+    if (typeof renderInvoiceRegister === 'function') renderInvoiceRegister();
+  }
+
+  // Capture the generated dataArr
+  if (typeof window.buildInvoiceDataPerPO === 'function') {
+    var _origData = window.buildInvoiceDataPerPO;
+    window.buildInvoiceDataPerPO = function () {
+      var arr = _origData.apply(this, arguments) || [];
+      window.__lastInvDataArr = arr;
+      return arr;
+    };
+  }
+
+  // After generate → persist in background
+  if (typeof window.generateInvoicePDF === 'function') {
+    var _origGen = window.generateInvoicePDF;
+    window.generateInvoicePDF = function () {
+      window.__lastInvDataArr = null;
+      var res = _origGen.apply(this, arguments);
+      var arr = window.__lastInvDataArr;
+      if (arr && arr.length) persistAll(arr);
+      return res;
+    };
+  }
+
+  // Reprint → fall back to the Drive PDF when local print data is missing
+  function localPrintData(invNo) {
+    invNo = String(invNo);
+    if (window.__invoiceStore && window.__invoiceStore[invNo]) return window.__invoiceStore[invNo];
+    try { var s = localStorage.getItem('mpt_invprint_' + invNo); if (s) return JSON.parse(s); } catch (e) {}
+    return null;
+  }
+  var _origReprint = window.reprintInvoice;
+  window.reprintInvoice = function (invNo) {
+    if (localPrintData(invNo) && typeof _origReprint === 'function') { _origReprint(invNo); return; }
+    var rec = (typeof invoiceRegister !== 'undefined')
+                ? invoiceRegister.filter(function (r) { return String(r.invNo) === String(invNo); })[0] : null;
+    if (rec && rec.fileUrl) { window.open(rec.fileUrl, '_blank'); return; }
+    if (typeof _origReprint === 'function') { _origReprint(invNo); return; }
+    alert('No reprint source available for MPT/INV/' + invNo + '.');
+  };
+
+  function enhanceReprintButtons() {
+    var body = document.getElementById('regTableBody'); if (!body) return;
+    Array.prototype.forEach.call(body.querySelectorAll('tr'), function (tr) {
+      var b = tr.querySelector('td:nth-child(2) b'); if (!b) return;
+      var invNo = b.textContent.replace('MPT/INV/', '').trim();
+      var btn = tr.querySelector('.reprint-btn'); if (!btn) return;
+      var rec = (typeof invoiceRegister !== 'undefined')
+                  ? invoiceRegister.filter(function (r) { return String(r.invNo) === invNo; })[0] : null;
+      if (rec && rec.fileUrl) { btn.style.opacity = ''; btn.title = 'Reprint (opens the stored Drive PDF if needed)'; }
+    });
+  }
+  if (typeof window.renderInvoiceRegister === 'function') {
+    var _origReg = window.renderInvoiceRegister;
+    window.renderInvoiceRegister = function () {
+      var r = _origReg.apply(this, arguments);
+      try { enhanceReprintButtons(); } catch (e) {}
+      return r;
+    };
+  }
+
+  window.__invPersistPatched = true;
+})();
+</script>
 
