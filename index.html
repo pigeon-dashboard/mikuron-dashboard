@@ -8291,4 +8291,129 @@ function exportSOAPDF() {
   else injectShipPanel();
 })();
 </script>
+<!--
+  ════════════════════════════════════════════════════════════════════════════
+  INVOICE REGISTER — "REPRINT" BUTTON
+  ════════════════════════════════════════════════════════════════════════════
+
+  WHERE TO PASTE:
+  Append this block at the very END of work-order-dashboard.html, AFTER the
+  Bill-To / Ship-To block you just added. (Both blocks live at the end of the
+  file, one after another — same as the others.)
+
+  WHAT IT DOES:
+  • Captures the full print data (line items, Bill To, Ship To, totals, GST,
+    PO/PR refs) every time you generate an invoice, and saves it in this
+    browser (localStorage) keyed by invoice number — so it survives refresh.
+  • Adds a "🖨 Reprint" button to every row of the Invoice Register (Tab 5),
+    in the "Invoice PDF / Signed DO" column. Clicking it rebuilds the identical
+    Invoice + DO and reopens the print dialog — no need to recreate or revise.
+
+  NOTES:
+  • Reprint works for invoices generated on THIS device/browser. Invoices that
+    were only synced down from Drive (created elsewhere) show a greyed-out
+    Reprint button, because their line-item data was never stored here.
+  • This does NOT change invoice numbers or delivery balances — it's a pure
+    reprint of what was already generated.
+
+  It wraps buildInvoicePDFPages() (to capture data) and renderInvoiceRegister()
+  (to add the button). Nothing in your file is edited.
+  ════════════════════════════════════════════════════════════════════════════
+-->
+<script>
+(function () {
+  window.__invoiceStore = window.__invoiceStore || {};
+
+  // ── Store full print data for one invoice (memory + localStorage) ────────────
+  function storePrintData(d, printType) {
+    if (!d || d.inv_no == null || !Array.isArray(d.items)) return;
+    var copy = Object.assign({}, d);
+    delete copy.__entries;                 // strip DOM-ish refs; not needed to reprint
+    copy.__printType = printType || 'both';
+    window.__invoiceStore[String(d.inv_no)] = copy;
+    try { localStorage.setItem('mpt_invprint_' + d.inv_no, JSON.stringify(copy)); } catch (e) {}
+  }
+
+  function getPrintData(invNo) {
+    invNo = String(invNo);
+    if (window.__invoiceStore[invNo]) return window.__invoiceStore[invNo];
+    try {
+      var s = localStorage.getItem('mpt_invprint_' + invNo);
+      if (s) { var o = JSON.parse(s); window.__invoiceStore[invNo] = o; return o; }
+    } catch (e) {}
+    return null;
+  }
+
+  function hasPrintData(invNo) { return !!getPrintData(invNo); }
+
+  // ── Capture data on every generate (outermost wrapper) ───────────────────────
+  if (typeof window.buildInvoicePDFPages === 'function' && !window.__reprintCapPatched) {
+    var _bp = window.buildInvoicePDFPages;
+    window.buildInvoicePDFPages = function (d, printType) {
+      try { storePrintData(d, printType); } catch (e) { console.error('reprint store:', e); }
+      return _bp.apply(this, arguments);
+    };
+    window.__reprintCapPatched = true;
+  }
+
+  // ── Reprint: rebuild the identical Invoice + DO and reopen the print dialog ───
+  window.reprintInvoice = function (invNo) {
+    var d = getPrintData(invNo);
+    if (!d) {
+      alert('Print data for MPT/INV/' + invNo + ' isn\u2019t stored in this browser.\n\n' +
+            'Reprint works for invoices you generated on this device. For an invoice ' +
+            'created elsewhere, use "Revise Invoice" to recreate it, or regenerate it from Tab 3.');
+      return;
+    }
+    if (typeof window.buildInvoicePDFPages !== 'function' || typeof window.buildCombinedPrintHTML !== 'function') {
+      alert('Print functions not available.'); return;
+    }
+    var printType = d.__printType || 'both';
+    var pages = window.buildInvoicePDFPages(d, printType);
+    var html  = window.buildCombinedPrintHTML(pages, d);
+    var win = window.open('', '_blank', 'width=950,height=750');
+    if (!win) { alert('Please allow pop-ups for this site to reprint.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
+  // ── Inject a Reprint button into each register row ───────────────────────────
+  function addReprintButtons() {
+    var body = document.getElementById('regTableBody');
+    if (!body) return;
+    Array.prototype.forEach.call(body.querySelectorAll('tr'), function (tr) {
+      var b = tr.querySelector('td:nth-child(2) b');   // <b>MPT/INV/xxxx</b>
+      if (!b) return;
+      var invNo = b.textContent.replace('MPT/INV/', '').trim();
+      if (!invNo) return;
+      var lastCell = tr.querySelector('td:last-child');
+      if (!lastCell || lastCell.querySelector('.reprint-btn')) return;
+
+      var have = hasPrintData(invNo);
+      var btn = document.createElement('button');
+      btn.className = 'reprint-btn';
+      btn.textContent = '🖨 Reprint';
+      btn.title = have
+        ? 'Re-open the print dialog for this invoice'
+        : 'Line-item data for this invoice isn\u2019t stored in this browser';
+      btn.style.cssText = 'margin-top:3px;display:block;font-size:11px;padding:3px 8px;' +
+        'border:1px solid #1e3a8a;border-radius:5px;background:#eff6ff;color:#1e3a8a;cursor:pointer;' +
+        (have ? '' : 'opacity:.45;');
+      btn.setAttribute('data-inv', invNo);
+      btn.onclick = function () { reprintInvoice(this.getAttribute('data-inv')); };
+      lastCell.appendChild(btn);
+    });
+  }
+
+  if (typeof window.renderInvoiceRegister === 'function' && !window.__reprintRegPatched) {
+    var _origReg = window.renderInvoiceRegister;
+    window.renderInvoiceRegister = function () {
+      var r = _origReg.apply(this, arguments);
+      try { addReprintButtons(); } catch (e) { console.error('reprint buttons:', e); }
+      return r;
+    };
+    window.__reprintRegPatched = true;
+  }
+})();
+</script>
 
