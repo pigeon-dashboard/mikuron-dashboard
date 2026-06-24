@@ -7069,23 +7069,30 @@ function handleDOUpload(input) {
 
 function previewSignedDO(invNo) {
   const record = invoiceRegister.find(r => r.invNo === invNo);
-  if (!record || !record.signedDOData) return;
+  if (!record) return;
+
+  // Case 1: DO came via the EMAIL pipeline → we have a Drive URL → just open it
+  if (record.signedDOUrl) {
+    window.open(record.signedDOUrl, '_blank');
+    return;
+  }
+
+  // Case 2: DO was uploaded through the dashboard → inline base64 data → render it
+  if (!record.signedDOData) return;
   const win = window.open('', '_blank', 'width=800,height=700');
   if (!win) return;
   if (record.signedDOData.startsWith('data:image')) {
     win.document.write(`<!DOCTYPE html><html><head><title>Signed DO — MPT/INV/${invNo}</title>
-    <style>body{margin:0;background:#333;display:flex;justify-content:center;align-items:flex-start;padding:20px}
-    img{max-width:100%;box-shadow:0 4px 20px rgba(0,0,0,.5)}</style></head>
-    <body><img src="${record.signedDOData}" alt="Signed DO"></body></html>`);
+      <style>body{margin:0;background:#333;display:flex;justify-content:center;align-items:flex-start;padding:20px}
+      img{max-width:100%;box-shadow:0 4px 20px rgba(0,0,0,.5)}</style></head>
+      <body><img src="${record.signedDOData}" alt="Signed DO"></body></html>`);
   } else {
-    // PDF data URL
     win.document.write(`<!DOCTYPE html><html><head><title>Signed DO — MPT/INV/${invNo}</title>
-    <style>body,html{margin:0;height:100%}iframe{width:100%;height:100%;border:none}</style></head>
-    <body><iframe src="${record.signedDOData}"></iframe></body></html>`);
+      <style>body,html{margin:0;height:100%}iframe{width:100%;height:100%;border:none}</style></head>
+      <body><iframe src="${record.signedDOData}"></iframe></body></html>`);
   }
   win.document.close();
 }
-
 // Update Sales Order allData rows that were invoiced under this invNo
 function updateSOStatusAfterDOReceived(invNo) {
   const hist = invoiceHistory.find(h => h.invNo === invNo);
