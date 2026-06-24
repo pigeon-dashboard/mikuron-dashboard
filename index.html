@@ -8603,7 +8603,10 @@ function exportSOAPDF() {
     var _origReg = window.renderInvoiceRegister;
     window.renderInvoiceRegister = function () { var r = _origReg.apply(this, arguments); try { enhanceReprintButtons(); } catch (e) {} return r; };
   }
-     <!--
+     window.__invPersistV2 = true;
+})();
+</script>
+<!--
   ════════════════════════════════════════════════════════════════════════════
   SEND e-INVOICE PANEL  (filters + multi-select + draft email + batch send)
   ════════════════════════════════════════════════════════════════════════════
@@ -8876,10 +8879,5 @@ function exportSOAPDF() {
   }
 
   window.__eInvoicePanel = true;
-})();
-</script>
-
-
-  window.__invPersistV2 = true;
 })();
 </script>
