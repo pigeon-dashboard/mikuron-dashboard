@@ -7734,3 +7734,366 @@ function exportSOAPDF() {
      
 </body>
 </html>
+<!--
+  ════════════════════════════════════════════════════════════════════════════
+  TAB 3 (INVOICE & DO) — FILTER SEARCH PANEL + SORTABLE LINE-ITEM TABLE
+  ════════════════════════════════════════════════════════════════════════════
+
+  WHERE TO PASTE:
+  Paste this entire block ONCE, just before the closing </body> tag of
+  work-order-dashboard.html (after the very last <script>). Nothing else
+  needs to change — it injects its own UI into #panelInvoice and wraps the
+  existing renderInvoiceTab() so the table re-renders whenever selection
+  or data changes.
+
+  WHAT IT ADDS:
+  • A collapsible "Filters & Search" panel above the line items:
+        – free-text search (Customer / PO / Item / Drawing No / Description / PR)
+        – Customer dropdown, Line status dropdown (Open / Partial / Closed)
+        – "Has balance only" toggle, Clear button, live result count
+  • A flat table with sortable headers — click a header to sort A→Z,
+    click again for Z→A. Numbers sort numerically, dates sort by date.
+  • A "Grouped | Table" view toggle (defaults to Table). Each table row has
+    the same checkbox + Deliver-qty input as the cards, wired to the existing
+    invSelectedItems / invDeliveryQtys state, so invoice generation is unchanged.
+
+  It reuses your existing handlers: toggleInvItem(), setInvQty(),
+  rowVal(), fmtMoney(), lineItemDelivered, invSelectedItems, invDeliveryQtys,
+  and window.__invAllGroupsMap (built by renderInvoiceTab).
+  ════════════════════════════════════════════════════════════════════════════
+-->
+<style>
+  /* ---- Tab 3 filter panel + sortable table ---- */
+  .invtbl-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:4px 0 12px; }
+  .invtbl-viewtoggle { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .invtbl-viewtoggle button { border:none; background:#fff; padding:8px 14px; font-size:13px; cursor:pointer; color:var(--muted); font-weight:600; }
+  .invtbl-viewtoggle button.active { background:#1e3a8a; color:#fff; }
+  .invtbl-filterbtn { padding:8px 14px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:6px; }
+  .invtbl-count { font-size:13px; color:var(--muted); margin-left:auto; }
+
+  .invtbl-filterpanel { display:none; background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  .invtbl-filtergrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:10px; }
+  .invtbl-filtergrid label { display:block; font-size:11px; font-weight:600; color:var(--muted); margin-bottom:4px; }
+  .invtbl-filtergrid input, .invtbl-filtergrid select { width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; box-sizing:border-box; }
+  .invtbl-filterrow { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .invtbl-chk { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#374151; cursor:pointer; }
+  .invtbl-clear { padding:8px 14px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-size:13px; white-space:nowrap; }
+
+  .invtbl-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:10px; max-height:65vh; overflow-y:auto; }
+  table.invtbl { width:100%; border-collapse:collapse; min-width:1100px; font-size:13px; background:#fff; }
+  table.invtbl thead th { position:sticky; top:0; z-index:2; background:#1e3a8a; color:#fff; text-align:left; padding:9px 11px; font-size:11px; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; }
+  table.invtbl thead th.sortable { cursor:pointer; user-select:none; }
+  table.invtbl thead th.sortable:hover { background:#1d4ed8; }
+  table.invtbl thead th .arrow { opacity:.4; margin-left:4px; font-size:10px; }
+  table.invtbl thead th.sorted .arrow { opacity:1; }
+  table.invtbl tbody td { padding:8px 11px; border-bottom:1px solid var(--border); white-space:nowrap; vertical-align:middle; }
+  table.invtbl tbody td.desc { white-space:normal; max-width:240px; }
+  table.invtbl tbody tr:hover { background:#f8fafc; }
+  table.invtbl tbody tr.sel { background:#f0fdf4; }
+  table.invtbl tbody tr.closed { opacity:.5; }
+  table.invtbl tbody tr.sel:hover { background:#dcfce7; }
+  table.invtbl .num { text-align:right; }
+  table.invtbl .bal { font-weight:700; }
+  .invtbl-qty { width:64px; padding:4px 6px; border:1px solid #d1d5db; border-radius:5px; font-size:12px; text-align:center; font-weight:700; color:#065f46; }
+  .invtbl-qty:focus { outline:none; border-color:#065f46; }
+  .invtbl-empty { padding:40px; text-align:center; color:var(--muted); }
+</style>
+
+<script>
+(function () {
+  // ── Namespaced state (won't clash with existing invCustFilter etc.) ──────────
+  var S = {
+    search: '', customer: '', status: '', balanceOnly: false,
+    sortKey: 'delivery', sortDir: 'asc', view: 'table'
+  };
+  window.invTableState = S;
+
+  // Columns: key, label, type (text|num|date), sortable
+  var COLS = [
+    { key: 'sel',       label: '',            sortable: false },
+    { key: 'customer',  label: 'Customer',    type: 'text' },
+    { key: 'po',        label: 'PO No',       type: 'text' },
+    { key: 'item',      label: 'Item',        type: 'text' },
+    { key: 'drawing',   label: 'Drawing No',  type: 'text' },
+    { key: 'desc',      label: 'Description',  type: 'text' },
+    { key: 'pr',        label: 'PR No',       type: 'text' },
+    { key: 'ordered',   label: 'Ordered',     type: 'num' },
+    { key: 'delivered', label: 'Delivered',   type: 'num' },
+    { key: 'balance',   label: 'Balance',     type: 'num' },
+    { key: 'price',     label: 'Unit Price',  type: 'num' },
+    { key: 'delivery',  label: 'Delivery',    type: 'date' },
+    { key: 'status',    label: 'Status',      type: 'text' }
+  ];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // Sortable date key — handles dd/mm/yyyy and yyyy-mm-dd; blanks sort last
+  function dateNum(s) {
+    if (!s) return 99999999;
+    var m = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return parseInt(m[3] + m[2] + m[1], 10);
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return 99999999;
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  }
+
+  // Flatten the grouped map into one row per line item
+  function buildRows() {
+    var gm = window.__invAllGroupsMap || new Map();
+    var rows = [];
+    gm.forEach(function (list, poKey) {
+      list.forEach(function (r) {
+        var itemKey   = poKey + '||' + r.__globalIdx;
+        var ordered   = parseFloat(rowVal(r, 'Qty')) || 0;
+        var delivered = (typeof lineItemDelivered !== 'undefined' && lineItemDelivered[itemKey]) || 0;
+        var balance   = Math.max(0, ordered - delivered);
+        var closed    = ordered > 0 && delivered >= ordered;
+        var status    = closed ? 'Closed' : (delivered > 0 ? 'Partial' : 'Open');
+        rows.push({
+          itemKey: itemKey, poKey: poKey, r: r, closed: closed,
+          customer: rowVal(r, 'Customer Name'),
+          po:       rowVal(r, 'Customer PO No'),
+          item:     rowVal(r, 'Item'),
+          drawing:  rowVal(r, 'Drawing No'),
+          desc:     rowVal(r, 'Description'),
+          pr:       rowVal(r, 'PR No'),
+          ordered: ordered, delivered: delivered, balance: balance,
+          price:    parseFloat(rowVal(r, 'Unit Price')) || 0,
+          delivery: rowVal(r, 'Requested Delivery'),
+          status: status
+        });
+      });
+    });
+    return rows;
+  }
+
+  function applyFilters(rows) {
+    var q = S.search.trim().toLowerCase();
+    return rows.filter(function (row) {
+      if (S.customer && row.customer !== S.customer) return false;
+      if (S.status && row.status !== S.status) return false;
+      if (S.balanceOnly && row.balance <= 0) return false;
+      if (q) {
+        var hay = (row.customer + ' ' + row.po + ' ' + row.item + ' ' +
+                   row.drawing + ' ' + row.desc + ' ' + row.pr).toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  function sortRows(rows) {
+    var col = COLS.filter(function (c) { return c.key === S.sortKey; })[0];
+    if (!col) return rows;
+    var dir = S.sortDir === 'desc' ? -1 : 1;
+    return rows.slice().sort(function (a, b) {
+      var va, vb;
+      if (col.type === 'num')  { va = a[col.key]; vb = b[col.key]; return (va - vb) * dir; }
+      if (col.type === 'date') { va = dateNum(a[col.key]); vb = dateNum(b[col.key]); return (va - vb) * dir; }
+      va = String(a[col.key] || '').toLowerCase();
+      vb = String(b[col.key] || '').toLowerCase();
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  }
+
+  function populateCustomerFilter(rows) {
+    var sel = document.getElementById('invtblCustomer');
+    if (!sel) return;
+    var custs = Array.from(new Set(rows.map(function (r) { return r.customer; }).filter(Boolean))).sort();
+    var prev = sel.value;
+    sel.innerHTML = '<option value="">All Customers</option>' +
+      custs.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+    if (custs.indexOf(prev) !== -1) sel.value = prev;
+  }
+
+  // ── Public render — reads the live grouped map, filters, sorts, draws ────────
+  window.renderInvoiceLineTable = function () {
+    var view = document.getElementById('invTableView');
+    if (!view) return;
+
+    var allRows = buildRows();
+    populateCustomerFilter(allRows);
+
+    var rows = sortRows(applyFilters(allRows));
+
+    var countEl = document.getElementById('invtblCount');
+    if (countEl) countEl.textContent = rows.length + ' of ' + allRows.length + ' line items';
+
+    if (allRows.length === 0) {
+      view.innerHTML = '<div class="invtbl-empty">No confirmed PO line items. Review Required items are in Tab 6.</div>';
+      return;
+    }
+    if (rows.length === 0) {
+      view.innerHTML = '<div class="invtbl-empty">No line items match these filters. <a href="#" onclick="clearInvTableFilters();return false;">Clear filters</a></div>';
+      return;
+    }
+
+    // Header
+    var thead = '<tr>' + COLS.map(function (c) {
+      if (!c.sortable && c.sortable !== undefined && c.key === 'sel') return '<th style="width:34px"></th>';
+      if (c.sortable === false) return '<th>' + esc(c.label) + '</th>';
+      var isSorted = S.sortKey === c.key;
+      var arrow = isSorted ? (S.sortDir === 'asc' ? '▲' : '▼') : '↕';
+      var alignNum = (c.type === 'num') ? ' style="text-align:right"' : '';
+      return '<th class="sortable' + (isSorted ? ' sorted' : '') + '"' + alignNum +
+             ' onclick="sortInvTable(\'' + c.key + '\')">' + esc(c.label) +
+             '<span class="arrow">' + arrow + '</span></th>';
+    }).join('') + '</tr>';
+
+    // Body
+    var body = rows.map(function (row) {
+      var checked = (typeof invSelectedItems !== 'undefined' && invSelectedItems.has(row.itemKey));
+      var invQty  = (typeof invDeliveryQtys !== 'undefined' && invDeliveryQtys[row.itemKey] !== undefined)
+                      ? invDeliveryQtys[row.itemKey] : row.balance;
+      var trCls = (checked ? 'sel' : '') + (row.closed ? ' closed' : '');
+      var k = row.itemKey.replace(/"/g, '&quot;');
+
+      var statusBadge = '<span class="badge ' +
+        (row.status === 'Closed' ? 'closed' : row.status === 'Partial' ? 'inproduction' : 'new') +
+        '">' + row.status + '</span>';
+
+      var qtyCell = (checked && !row.closed)
+        ? '<input type="number" class="invtbl-qty" value="' + invQty + '" min="1" max="' + row.balance +
+          '" step="1" data-key="' + k + '" onchange="setInvQty(this.dataset.key, this.value)" onclick="event.stopPropagation()">'
+        : (row.closed ? '—' : invQty);
+
+      return '<tr class="' + trCls + '">' +
+        '<td><input type="checkbox" ' + (checked ? 'checked' : '') + (row.closed ? ' disabled' : '') +
+            ' data-key="' + k + '" onchange="toggleInvItem(this.dataset.key, this.checked)"></td>' +
+        '<td>' + esc(row.customer) + '</td>' +
+        '<td>' + esc(row.po) + '</td>' +
+        '<td><b>' + esc(row.item || '—') + '</b></td>' +
+        '<td>' + esc(row.drawing || '—') + '</td>' +
+        '<td class="desc">' + esc(row.desc || '—') + '</td>' +
+        '<td>' + esc(row.pr || '—') + '</td>' +
+        '<td class="num">' + row.ordered.toLocaleString() + '</td>' +
+        '<td class="num">' + row.delivered.toLocaleString() + '</td>' +
+        '<td class="num bal" style="color:' + (row.balance > 0 ? '#dc2626' : '#16a34a') + '">' +
+            (row.closed ? '—' : qtyCell === invQty || qtyCell.indexOf('input') === -1 ? row.balance.toLocaleString() : row.balance.toLocaleString()) + '</td>' +
+        '<td class="num">' + fmtMoney(row.price) + '</td>' +
+        '<td>' + esc(row.delivery || '—') + '</td>' +
+        '<td>' + statusBadge + '</td>' +
+      '</tr>';
+    }).join('');
+
+    view.innerHTML = '<div class="invtbl-wrap"><table class="invtbl"><thead>' + thead +
+                     '</thead><tbody>' + body + '</tbody></table></div>';
+  };
+
+  // ── Header click → set/flip sort ─────────────────────────────────────────────
+  window.sortInvTable = function (key) {
+    if (S.sortKey === key) { S.sortDir = (S.sortDir === 'asc') ? 'desc' : 'asc'; }
+    else { S.sortKey = key; S.sortDir = 'asc'; }
+    window.renderInvoiceLineTable();
+  };
+
+  // ── Filter input handlers ────────────────────────────────────────────────────
+  window.onInvTableFilter = function () {
+    S.search      = (document.getElementById('invtblSearch')   || {}).value || '';
+    S.customer    = (document.getElementById('invtblCustomer') || {}).value || '';
+    S.status      = (document.getElementById('invtblStatus')   || {}).value || '';
+    S.balanceOnly = !!(document.getElementById('invtblBalanceOnly') || {}).checked;
+    window.renderInvoiceLineTable();
+  };
+
+  window.clearInvTableFilters = function () {
+    S.search = ''; S.customer = ''; S.status = ''; S.balanceOnly = false;
+    ['invtblSearch', 'invtblCustomer', 'invtblStatus'].forEach(function (id) {
+      var el = document.getElementById(id); if (el) el.value = '';
+    });
+    var b = document.getElementById('invtblBalanceOnly'); if (b) b.checked = false;
+    window.renderInvoiceLineTable();
+  };
+
+  window.toggleInvFilterPanel = function () {
+    var p = document.getElementById('invtblFilterPanel');
+    var c = document.getElementById('invtblFilterCaret');
+    if (!p) return;
+    var open = p.style.display !== 'none' && p.style.display !== '';
+    p.style.display = open ? 'none' : 'block';
+    if (c) c.textContent = open ? '▶' : '▼';
+  };
+
+  window.setInvTableView = function (view) {
+    S.view = view;
+    syncViewVisibility();
+    if (view === 'table') window.renderInvoiceLineTable();
+  };
+
+  function syncViewVisibility() {
+    var groups = document.getElementById('invGroups');
+    var table  = document.getElementById('invTableView');
+    var gBtn   = document.getElementById('invViewGrouped');
+    var tBtn   = document.getElementById('invViewTable');
+    if (groups) groups.style.display = (S.view === 'grouped') ? '' : 'none';
+    if (table)  table.style.display  = (S.view === 'table')   ? '' : 'none';
+    if (gBtn) gBtn.classList.toggle('active', S.view === 'grouped');
+    if (tBtn) tBtn.classList.toggle('active', S.view === 'table');
+  }
+
+  // ── Inject the toolbar + filter panel + table container into Tab 3 ───────────
+  function injectUI() {
+    var panel = document.getElementById('panelInvoice');
+    if (!panel || document.getElementById('invtblFilterPanel')) return;
+    var groups = document.getElementById('invGroups');
+    if (!groups) return;
+
+    var toolbar = document.createElement('div');
+    toolbar.innerHTML =
+      '<div class="invtbl-toolbar">' +
+        '<div class="invtbl-viewtoggle">' +
+          '<button id="invViewGrouped" onclick="setInvTableView(\'grouped\')">Grouped</button>' +
+          '<button id="invViewTable" class="active" onclick="setInvTableView(\'table\')">Table</button>' +
+        '</div>' +
+        '<button class="invtbl-filterbtn" onclick="toggleInvFilterPanel()">' +
+          '<span id="invtblFilterCaret">▶</span> Filters &amp; Search' +
+        '</button>' +
+        '<span class="invtbl-count" id="invtblCount"></span>' +
+      '</div>' +
+      '<div class="invtbl-filterpanel" id="invtblFilterPanel">' +
+        '<div class="invtbl-filtergrid">' +
+          '<div style="grid-column:1/-1">' +
+            '<label>Search</label>' +
+            '<input type="text" id="invtblSearch" placeholder="Customer, PO No, Item, Drawing No, Description, PR No..." oninput="onInvTableFilter()">' +
+          '</div>' +
+          '<div><label>Customer</label><select id="invtblCustomer" onchange="onInvTableFilter()"><option value="">All Customers</option></select></div>' +
+          '<div><label>Line Status</label><select id="invtblStatus" onchange="onInvTableFilter()">' +
+            '<option value="">All</option><option value="Open">Open</option>' +
+            '<option value="Partial">Partial</option><option value="Closed">Closed</option></select></div>' +
+        '</div>' +
+        '<div class="invtbl-filterrow">' +
+          '<label class="invtbl-chk"><input type="checkbox" id="invtblBalanceOnly" onchange="onInvTableFilter()"> Has balance only</label>' +
+          '<button class="invtbl-clear" onclick="clearInvTableFilters()">✕ Clear Filters</button>' +
+        '</div>' +
+      '</div>';
+    groups.parentNode.insertBefore(toolbar, groups);
+
+    var tableView = document.createElement('div');
+    tableView.id = 'invTableView';
+    groups.parentNode.insertBefore(tableView, groups.nextSibling);
+
+    syncViewVisibility();
+  }
+
+  // ── Wrap renderInvoiceTab so the table refreshes with selection/data ─────────
+  function patchRender() {
+    if (typeof window.renderInvoiceTab !== 'function' || window.__invTablePatched) return;
+    var orig = window.renderInvoiceTab;
+    window.renderInvoiceTab = function () {
+      var res = orig.apply(this, arguments);
+      injectUI();
+      syncViewVisibility();
+      if (S.view === 'table') { try { window.renderInvoiceLineTable(); } catch (e) { console.error('invtbl render:', e); } }
+      return res;
+    };
+    window.__invTablePatched = true;
+  }
+
+  function boot() { injectUI(); patchRender(); if (S.view === 'table') { try { window.renderInvoiceLineTable(); } catch (e) {} } }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>
