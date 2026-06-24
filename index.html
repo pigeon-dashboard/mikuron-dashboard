@@ -8603,6 +8603,282 @@ function exportSOAPDF() {
     var _origReg = window.renderInvoiceRegister;
     window.renderInvoiceRegister = function () { var r = _origReg.apply(this, arguments); try { enhanceReprintButtons(); } catch (e) {} return r; };
   }
+     <!--
+  ════════════════════════════════════════════════════════════════════════════
+  SEND e-INVOICE PANEL  (filters + multi-select + draft email + batch send)
+  ════════════════════════════════════════════════════════════════════════════
+  Append at the very END of work-order-dashboard.html (after your other blocks).
+  Pairs with AppsScript_send_einvoice_batch.gs (must be deployed).
+
+  WHAT IT DOES:
+  • Adds a "📧 Send e-Invoice" button to the Invoice Register tab.
+  • Opens a panel with FILTERS (customer, date from/to, invoice no, eligible-only).
+  • Lets you MULTI-SELECT invoices for ONE customer and send them in a SINGLE
+    email, attaching each invoice PDF + its signed DO.
+  • Recipient auto-fills from your address book; you can add EXTRA recipients
+    (additional invoice emails) and Cc.
+  • Auto-drafts the subject + body (editable) — nothing sends until you click Send.
+
+  NOTE: it reads invoice rows from your in-memory invoiceRegister. It looks for
+  the invoice PDF link and the signed-DO link on each row. If your signed-DO link
+  is stored under a field name I didn't guess, the DO shows as missing — tell me
+  the field name and I'll wire it; invoices still send fine meanwhile.
+  ════════════════════════════════════════════════════════════════════════════
+-->
+<script>
+(function () {
+  if (window.__eInvoicePanel) return;
+
+  // tolerant getters for register record fields
+  function gInv(r){ return r.invNo != null ? String(r.invNo) : ''; }
+  function gCust(r){ return r.custName || r.customer || ''; }
+  function gDate(r){ return r.invDate || r.date || r.invoiceDate || ''; }
+  function gTotal(r){ return (r.total != null ? r.total : (r.grandTotal != null ? r.grandTotal : '')); }
+  function gInvUrl(r){ return r.fileUrl || r.invoiceUrl || r.pdfUrl || ''; }
+  function gDoUrl(r){ return r.doUrl || r.signedDoUrl || r.signedDOUrl || r.doFileUrl || r.signedDoFileUrl || r.signedDOUrlLink || ''; }
+  function gEStatus(r){ return r.eInvoiceStatus || r.einvStatus || ''; }
+  function bookEmail(cust){
+    try { var b = CUSTOMER_ADDRESS_BOOK[String(cust||'').toLowerCase().trim()]; return (b && b.email) || ''; } catch(e){ return ''; }
+  }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function money(v){ var n=Number(v); return isNaN(n)?'' : n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+  var selected = {};      // invNo -> record
+  var bodyDirty = false, subjDirty = false;
+
+  function regList(){ return (typeof invoiceRegister !== 'undefined' && Array.isArray(invoiceRegister)) ? invoiceRegister : []; }
+
+  function distinctCustomers(){
+    var s = {}; regList().forEach(function(r){ var c=gCust(r); if(c) s[c]=true; });
+    return Object.keys(s).sort();
+  }
+
+  function filtered(){
+    var cust = document.getElementById('eiFCust').value;
+    var from = document.getElementById('eiFFrom').value;
+    var to   = document.getElementById('eiFTo').value;
+    var q    = document.getElementById('eiFNo').value.trim().toLowerCase();
+    var elig = document.getElementById('eiFElig').checked;
+    return regList().filter(function(r){
+      if (cust && gCust(r) !== cust) return false;
+      var d = gDate(r);
+      if (from && d && d < from) return false;
+      if (to && d && d > to) return false;
+      if (q && gInv(r).toLowerCase().indexOf(q) === -1) return false;
+      if (elig && !gInvUrl(r)) return false;   // eligible = has an invoice PDF
+      return true;
+    });
+  }
+
+  function renderRows(){
+    var tb = document.getElementById('eiRows'); if (!tb) return;
+    var rows = filtered();
+    if (!rows.length){ tb.innerHTML = '<tr><td colspan="8" style="padding:18px;text-align:center;color:#64748b;">No invoices match these filters.</td></tr>'; return; }
+    tb.innerHTML = rows.map(function(r){
+      var no = gInv(r), has = selected[no] ? 'checked' : '';
+      var invOk = gInvUrl(r) ? '✅' : '—';
+      var doOk  = gDoUrl(r)  ? '✅' : '—';
+      var st = gEStatus(r);
+      return '<tr style="border-bottom:1px solid #eef2f7;">' +
+        '<td style="padding:7px 8px;text-align:center;"><input type="checkbox" data-no="'+esc(no)+'" '+has+' onchange="__eiToggle(this)"></td>' +
+        '<td style="padding:7px 8px;font-weight:600;">MPT/INV/'+esc(no)+'</td>' +
+        '<td style="padding:7px 8px;">'+esc(gCust(r))+'</td>' +
+        '<td style="padding:7px 8px;">'+esc(gDate(r))+'</td>' +
+        '<td style="padding:7px 8px;text-align:right;">'+money(gTotal(r))+'</td>' +
+        '<td style="padding:7px 8px;text-align:center;">'+invOk+'</td>' +
+        '<td style="padding:7px 8px;text-align:center;">'+doOk+'</td>' +
+        '<td style="padding:7px 8px;text-align:center;color:'+(st==='Sent'?'#0f5132':'#94a3b8')+';font-size:12px;">'+(st||'—')+'</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  window.__eiToggle = function(cb){
+    var no = cb.getAttribute('data-no');
+    var rec = regList().filter(function(r){ return gInv(r)===no; })[0];
+    if (cb.checked) selected[no] = rec; else delete selected[no];
+    refreshCompose();
+  };
+
+  function selectedRecs(){ return Object.keys(selected).map(function(k){ return selected[k]; }).filter(Boolean); }
+
+  function refreshCompose(){
+    var recs = selectedRecs();
+    var custs = {}; recs.forEach(function(r){ custs[gCust(r)] = true; });
+    var custNames = Object.keys(custs);
+    var warn = document.getElementById('eiWarn');
+    var cust = custNames[0] || '';
+
+    // recipient + attachments summary
+    document.getElementById('eiCount').textContent = recs.length;
+    var attach = 0; recs.forEach(function(r){ if(gInvUrl(r)) attach++; if(gDoUrl(r)) attach++; });
+    document.getElementById('eiAttach').textContent = attach;
+
+    if (custNames.length > 1) {
+      warn.style.display = 'block';
+      warn.textContent = '⚠ You selected invoices from ' + custNames.length + ' different customers. One email = one customer. Please select a single customer\u2019s invoices.';
+    } else {
+      warn.style.display = 'none';
+      var to = document.getElementById('eiTo');
+      if (cust && (!to.value || to.dataset.auto === '1')) { to.value = bookEmail(cust); to.dataset.auto = '1'; }
+    }
+
+    // auto-draft subject/body unless user edited
+    if (!subjDirty) document.getElementById('eiSubject').value = draftSubject(recs, cust);
+    if (!bodyDirty) document.getElementById('eiBody').value = draftBody(recs, cust);
+  }
+
+  function draftSubject(recs, cust){
+    if (!recs.length) return 'Mikuron Precision — Tax Invoice & Signed DO';
+    if (recs.length === 1) return 'Mikuron Precision Pte Ltd — Tax Invoice MPT/INV/' + gInv(recs[0]) + ' & Signed DO';
+    return 'Mikuron Precision Pte Ltd — Tax Invoices (' + recs.length + ') & Signed DOs — ' + cust;
+  }
+
+  function draftBody(recs, cust){
+    var lines = recs.map(function(r){
+      var t = gTotal(r); var tt = (t!=='' && t!=null) ? ' — SGD ' + money(t) : '';
+      return '• Tax Invoice MPT/INV/' + gInv(r) + tt;
+    }).join('\n');
+    var greet = cust ? ('Dear ' + cust + ',') : 'Dear Sir/Madam,';
+    return greet + '\n\n' +
+      'Please find attached the following tax invoice(s) together with the corresponding signed Delivery Order(s) for your records:\n\n' +
+      lines + '\n\n' +
+      'Kindly arrange payment as per the agreed terms. Should you have any questions regarding these invoices, please do not hesitate to contact us.\n\n' +
+      'Thank you for your continued business.\n\n' +
+      'Best regards,\n' +
+      'Mikuron Precision Pte Ltd\n' +
+      '48 Toh Guan Road East, #05-149, Enterprise Hub, Singapore 608586\n' +
+      'Tel: 65-9022 2093 | Email: dominick.han@mikuronpteltd.com';
+  }
+
+  function openPanel(){
+    var ov = document.getElementById('eiOverlay');
+    if (ov) { ov.style.display = 'flex'; rebuildCustomerFilter(); renderRows(); refreshCompose(); return; }
+
+    ov = document.createElement('div');
+    ov.id = 'eiOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    var inp = 'width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;box-sizing:border-box;';
+    ov.innerHTML =
+      '<div style="background:#fff;border-radius:12px;width:min(1000px,96vw);max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:#a32638;color:#fff;">' +
+          '<b style="font-size:15px;">📧 Send e-Invoice to Customer</b>' +
+          '<span onclick="__eiClose()" style="cursor:pointer;font-size:20px;line-height:1;">×</span>' +
+        '</div>' +
+        '<div style="padding:14px 18px;border-bottom:1px solid #eef2f7;display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end;">' +
+          '<div><label style="font-size:11px;font-weight:700;color:#64748b;">Customer</label><select id="eiFCust" style="'+inp+'" onchange="__eiFilter()"></select></div>' +
+          '<div><label style="font-size:11px;font-weight:700;color:#64748b;">From date</label><input type="date" id="eiFFrom" style="'+inp+'" onchange="__eiFilter()"></div>' +
+          '<div><label style="font-size:11px;font-weight:700;color:#64748b;">To date</label><input type="date" id="eiFTo" style="'+inp+'" onchange="__eiFilter()"></div>' +
+          '<div><label style="font-size:11px;font-weight:700;color:#64748b;">Invoice No</label><input type="text" id="eiFNo" placeholder="6418" style="'+inp+'" oninput="__eiFilter()"></div>' +
+          '<div style="white-space:nowrap;"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="eiFElig" checked onchange="__eiFilter()"> Eligible only</label></div>' +
+        '</div>' +
+        '<div style="flex:1;overflow:auto;padding:0 18px;">' +
+          '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+            '<thead><tr style="position:sticky;top:0;background:#f8fafc;text-align:left;color:#475569;font-size:11px;text-transform:uppercase;">' +
+              '<th style="padding:8px;"></th><th style="padding:8px;">Inv No</th><th style="padding:8px;">Customer</th><th style="padding:8px;">Date</th>' +
+              '<th style="padding:8px;text-align:right;">Total</th><th style="padding:8px;text-align:center;">INV</th><th style="padding:8px;text-align:center;">DO</th><th style="padding:8px;text-align:center;">e-Inv</th>' +
+            '</tr></thead><tbody id="eiRows"></tbody>' +
+          '</table>' +
+        '</div>' +
+        '<div id="eiWarn" style="display:none;margin:8px 18px;padding:8px 10px;background:#fff3cd;color:#664d03;border-radius:6px;font-size:12px;"></div>' +
+        '<div style="padding:12px 18px;border-top:1px solid #eef2f7;display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+          '<div><label style="font-size:11px;font-weight:700;color:#64748b;">To (primary)</label><input type="text" id="eiTo" style="'+inp+'" oninput="this.dataset.auto=0"></div>' +
+          '<div><label style="font-size:11px;font-weight:700;color:#64748b;">Additional invoice emails (comma-separated)</label><input type="text" id="eiAddl" placeholder="accounts@customer.com, buyer@customer.com" style="'+inp+'"></div>' +
+          '<div><label style="font-size:11px;font-weight:700;color:#64748b;">Cc (optional)</label><input type="text" id="eiCc" style="'+inp+'"></div>' +
+          '<div><label style="font-size:11px;font-weight:700;color:#64748b;">Subject</label><input type="text" id="eiSubject" style="'+inp+'" oninput="window.__eiSubjDirty()"></div>' +
+          '<div style="grid-column:span 2;"><label style="font-size:11px;font-weight:700;color:#64748b;">Message</label><textarea id="eiBody" rows="7" style="'+inp+'font-family:inherit;resize:vertical;" oninput="window.__eiBodyDirty()"></textarea></div>' +
+        '</div>' +
+        '<div style="padding:12px 18px;border-top:1px solid #eef2f7;display:flex;align-items:center;justify-content:space-between;background:#f8fafc;">' +
+          '<span style="font-size:12px;color:#64748b;"><b id="eiCount">0</b> invoice(s) selected · <b id="eiAttach">0</b> attachment(s)</span>' +
+          '<div style="display:flex;gap:10px;">' +
+            '<button onclick="__eiClose()" style="padding:9px 16px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;cursor:pointer;font-size:13px;">Cancel</button>' +
+            '<button id="eiSendBtn" onclick="__eiSend()" style="padding:9px 18px;border:0;border-radius:7px;background:#a32638;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">Send e-Invoice</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    rebuildCustomerFilter(); renderRows(); refreshCompose();
+  }
+
+  function rebuildCustomerFilter(){
+    var sel = document.getElementById('eiFCust'); if (!sel) return;
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">All customers</option>' + distinctCustomers().map(function(c){ return '<option'+(c===cur?' selected':'')+'>'+esc(c)+'</option>'; }).join('');
+  }
+
+  window.__eiFilter   = function(){ renderRows(); };
+  window.__eiSubjDirty = function(){ subjDirty = true; };
+  window.__eiBodyDirty = function(){ bodyDirty = true; };
+  window.__eiClose = function(){ var ov=document.getElementById('eiOverlay'); if(ov) ov.style.display='none'; };
+
+  window.__eiSend = function(){
+    var recs = selectedRecs();
+    if (!recs.length){ alert('Select at least one invoice.'); return; }
+    var custs = {}; recs.forEach(function(r){ custs[gCust(r)] = true; });
+    if (Object.keys(custs).length > 1){ alert('Please select invoices for ONE customer per email.'); return; }
+
+    var to = document.getElementById('eiTo').value.trim();
+    var addl = document.getElementById('eiAddl').value.trim();
+    var toAll = [to, addl].filter(function(x){ return x; }).join(',');
+    if (!toAll){ alert('Enter a recipient email.'); return; }
+
+    var items = recs.map(function(r){ return { invNo: gInv(r), invoiceUrl: gInvUrl(r), doUrl: gDoUrl(r) }; });
+    var noInv = items.filter(function(i){ return !i.invoiceUrl; });
+    if (noInv.length && !confirm(noInv.length + ' selected invoice(s) have no PDF link and will be skipped as attachments. Continue?')) return;
+
+    var bodyText = document.getElementById('eiBody').value;
+    var bodyHtml = esc(bodyText).replace(/\n/g,'<br>');
+
+    var form = new URLSearchParams();
+    form.append('action','send_einvoice');
+    form.append('toEmail', toAll);
+    form.append('cc', document.getElementById('eiCc').value.trim());
+    form.append('customerName', Object.keys(custs)[0] || '');
+    form.append('subject', document.getElementById('eiSubject').value);
+    form.append('bodyHtml', bodyHtml);
+    form.append('itemsJson', JSON.stringify(items));
+
+    var btn = document.getElementById('eiSendBtn'); btn.disabled = true; btn.textContent = 'Sending...';
+    fetch(WEBAPP_URL, { method:'POST', body: form })
+      .then(function(r){ return r.text(); })
+      .then(function(t){
+        var j; try { j = JSON.parse(t); } catch(e){ var m=t.match(/\{[\s\S]*\}/); j = m?JSON.parse(m[0]):{status:'error',message:t.slice(0,160)}; }
+        console.log('send_einvoice response:', j);
+        btn.disabled = false; btn.textContent = 'Send e-Invoice';
+        if (j && j.status === 'ok'){
+          // mark sent locally
+          recs.forEach(function(r){ r.eInvoiceStatus = 'Sent'; });
+          alert('✅ Sent to ' + j.sentTo + (j.cc?(' (cc '+j.cc+')'):'') + '\nInvoices: ' + (j.invoices||[]).map(function(n){return 'MPT/INV/'+n;}).join(', ') + '\nAttachments: ' + j.attached + (j.missing&&j.missing.length?('\n\n⚠ Missing: '+j.missing.join(', ')):''));
+          selected = {}; renderRows(); refreshCompose();
+          if (typeof renderInvoiceRegister === 'function') renderInvoiceRegister();
+        } else {
+          alert('❌ Send failed: ' + ((j&&j.message)||'unknown') + '\n(See console F12 for detail.)');
+        }
+      })
+      .catch(function(e){ btn.disabled=false; btn.textContent='Send e-Invoice'; alert('❌ Request failed: '+e.message); });
+  };
+
+  // inject the launch button into the Invoice Register tab
+  function injectButton(){
+    var panel = document.getElementById('panelInvoice'); if (!panel || document.getElementById('eiOpenBtn')) return;
+    var btn = document.createElement('button');
+    btn.id = 'eiOpenBtn';
+    btn.textContent = '📧 Send e-Invoice';
+    btn.onclick = openPanel;
+    btn.style.cssText = 'margin:10px 0;padding:9px 16px;border:0;border-radius:8px;background:#a32638;color:#fff;font-weight:600;font-size:13px;cursor:pointer;';
+    panel.insertBefore(btn, panel.firstChild);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectButton);
+  else injectButton();
+  // re-inject if the tab re-renders
+  if (typeof window.renderInvoiceRegister === 'function') {
+    var _r = window.renderInvoiceRegister;
+    window.renderInvoiceRegister = function(){ var x=_r.apply(this,arguments); try{injectButton();}catch(e){} return x; };
+  }
+
+  window.__eInvoicePanel = true;
+})();
+</script>
+
 
   window.__invPersistV2 = true;
 })();
