@@ -8097,3 +8097,198 @@ function exportSOAPDF() {
   else boot();
 })();
 </script>
+<!--
+  ════════════════════════════════════════════════════════════════════════════
+  TAB 3 (INVOICE & DO) — BILL TO on Invoice, SHIP TO on Delivery Order
+  ════════════════════════════════════════════════════════════════════════════
+
+  WHERE TO PASTE:
+  Paste this block ONCE, just before the closing </body> of
+  work-order-dashboard.html (after your last <script>; placing it after the
+  Tab-3 filter/sort table block from before is fine).
+
+  WHAT IT DOES:
+  1. The INVOICE page prints the Bill To address; the DELIVERY ORDER pages
+     print the Ship To address.
+  2. Both auto-fill from CUSTOMER_ADDRESS_BOOK using the PO's customer name —
+     so even if you don't click "Auto-fill ↓", the invoice no longer prints a
+     blank address (this is the gap in your screenshot).
+  3. Ship To resolution order:  custom typed Ship To  →  the customer's saved
+     Ship To (book.shipTo)  →  the Bill To address (default).
+  4. Adds a small "Delivery Order — Ship To" panel under the invoice config so
+     you can deliver a one-off shipment to a different address when needed.
+
+  No existing functions are edited — it wraps buildInvoiceDataPerPO() and
+  buildInvoicePDFPages() and reuses your existing render, so the layout is
+  unchanged except for which address each document shows.
+
+  ── TO GIVE A CUSTOMER A PERMANENT, DIFFERENT DELIVERY ADDRESS ────────────────
+  Add a shipTo block to that customer in CUSTOMER_ADDRESS_BOOK, e.g.:
+
+    'champion precision manufacturing pte ltd': {
+        name: 'CHAMPION PRECISION MANUFACTURING PTE LTD',
+        addr1: 'Blk 1 Yishun Street 23, #01-02/03',
+        addr2: 'YS-One Singapore 768441',
+        tel: '65-67580820', fax: '65-67580825',
+        attn: 'Charlie Win', email: '',
+        shipTo: {                          // ← add this
+          name:  'CHAMPION PRECISION — RECEIVING DOCK',
+          addr1: '12 Sungei Kadut Loop',
+          addr2: 'Singapore 729453',
+          attn:  'Store / Goods Inwards'
+        }
+    },
+
+  If a customer has no shipTo, the DO simply uses their Bill To address.
+  ════════════════════════════════════════════════════════════════════════════
+-->
+<script>
+(function () {
+
+  function gv(id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; }
+
+  // Read the optional one-off Ship To panel. Returns null when "different
+  // address" is unchecked (meaning: fall back to saved shipTo or Bill To).
+  function readShipForm() {
+    var diff = document.getElementById('shipDifferent');
+    if (!diff || !diff.checked) return null;
+    return { name: gv('shipName'), addr1: gv('shipAddr1'), addr2: gv('shipAddr2'), attn: gv('shipAttn') };
+  }
+
+  // Resolve Bill To + Ship To for one invoice data object.
+  function resolveBillShip(d) {
+    var name = (d.customer && d.customer.name) || '';
+    var book = (typeof CUSTOMER_ADDRESS_BOOK !== 'undefined')
+                 ? CUSTOMER_ADDRESS_BOOK[name.toLowerCase().trim()] : null;
+
+    // ── Bill To: keep whatever the form already supplied, fill blanks from book
+    var billTo = {
+      name:  (d.customer && d.customer.name)  || (book && book.name)  || name,
+      addr1: (d.customer && d.customer.addr1) || (book && book.addr1) || '',
+      addr2: (d.customer && d.customer.addr2) || (book && book.addr2) || '',
+      tel:   (d.customer && d.customer.tel)   || (book && book.tel)   || '',
+      fax:   (d.customer && d.customer.fax)   || (book && book.fax)   || ''
+    };
+    var billAttn = d.attn || (book && book.attn) || '';
+
+    // ── Ship To: typed override → saved book.shipTo → same as Bill To
+    var shipForm = readShipForm();
+    var shipBook = (book && book.shipTo) ? book.shipTo : null;
+    var shipTo, shipAttn;
+    if (shipForm) {
+      shipTo = {
+        name:  shipForm.name  || billTo.name,
+        addr1: shipForm.addr1 || '',
+        addr2: shipForm.addr2 || '',
+        tel:   billTo.tel, fax: billTo.fax
+      };
+      shipAttn = shipForm.attn || billAttn;
+    } else if (shipBook) {
+      shipTo = {
+        name:  shipBook.name  || billTo.name,
+        addr1: shipBook.addr1 || '',
+        addr2: shipBook.addr2 || '',
+        tel:   shipBook.tel   || billTo.tel,
+        fax:   shipBook.fax   || billTo.fax
+      };
+      shipAttn = shipBook.attn || billAttn;
+    } else {
+      shipTo = billTo;          // default: deliver to the billing address
+      shipAttn = billAttn;
+    }
+
+    return { billTo: billTo, billAttn: billAttn, shipTo: shipTo, shipAttn: shipAttn };
+  }
+
+  // ── Wrap buildInvoiceDataPerPO so every invoice carries billTo + shipTo ──────
+  if (typeof window.buildInvoiceDataPerPO === 'function' && !window.__billShipDataPatched) {
+    var _origData = window.buildInvoiceDataPerPO;
+    window.buildInvoiceDataPerPO = function () {
+      var arr = _origData.apply(this, arguments) || [];
+      arr.forEach(function (d) {
+        var r = resolveBillShip(d);
+        d.billTo  = r.billTo;  d.billAttn = r.billAttn;
+        d.shipTo  = r.shipTo;  d.shipAttn = r.shipAttn;
+        d.customer = r.billTo;          // invoice + register keep using Bill To
+        d.attn     = r.billAttn;
+      });
+      return arr;
+    };
+    window.__billShipDataPatched = true;
+  }
+
+  // ── Wrap buildInvoicePDFPages: Invoice = Bill To, DO = Ship To ───────────────
+  //  Reuses your original renderer twice (once in 'invoice' mode with Bill To,
+  //  once in 'do' mode with Ship To) so the layout/markup is identical — only
+  //  the address block differs per document.
+  if (typeof window.buildInvoicePDFPages === 'function' && !window.__billShipPagesPatched) {
+    var _origPages = window.buildInvoicePDFPages;
+    window.buildInvoicePDFPages = function (d, printType) {
+      printType = printType || 'both';
+      var billTo = d.billTo || d.customer;
+      var shipTo = d.shipTo || d.customer;
+      var out = [];
+      if (printType !== 'do') {
+        var dInv = Object.assign({}, d, { customer: billTo, attn: (d.billAttn != null ? d.billAttn : d.attn) });
+        out.push(_origPages(dInv, 'invoice'));
+      }
+      if (printType !== 'invoice') {
+        var dDo = Object.assign({}, d, { customer: shipTo, attn: (d.shipAttn != null ? d.shipAttn : d.attn) });
+        out.push(_origPages(dDo, 'do'));
+      }
+      return out.join('\n');
+    };
+    window.__billShipPagesPatched = true;
+  }
+
+  // ── Inject the "Delivery Order — Ship To" panel under the invoice config ─────
+  function injectShipPanel() {
+    var cfg = document.getElementById('invConfig');
+    if (!cfg || document.getElementById('shipToPanel')) return;
+
+    var lbl = 'font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px;display:block;';
+    var inp = 'width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;';
+
+    var panel = document.createElement('div');
+    panel.id = 'shipToPanel';
+    panel.style.cssText = 'background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;';
+    panel.innerHTML =
+      '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">' +
+        '<b style="font-size:13px;">📦 Delivery Order — Ship To</b>' +
+        '<label style="font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">' +
+          '<input type="checkbox" id="shipDifferent" onchange="toggleShipFields()"> Deliver to a different address' +
+        '</label>' +
+        '<button type="button" onclick="copyBillToShip()" style="font-size:11px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:#f8fafc;cursor:pointer;">Copy from Bill To</button>' +
+        '<span style="font-size:11px;color:var(--muted);margin-left:auto;">Unchecked → DO uses the customer\u2019s saved Ship To, or the Bill To address.</span>' +
+      '</div>' +
+      '<div id="shipFields" style="display:none;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">' +
+        '<div style="grid-column:span 2;"><label style="' + lbl + '">Ship To — Company</label><input type="text" id="shipName" style="' + inp + '" placeholder="Delivery recipient company"></div>' +
+        '<div style="grid-column:span 2;"><label style="' + lbl + '">Address Line 1</label><input type="text" id="shipAddr1" style="' + inp + '"></div>' +
+        '<div style="grid-column:span 2;"><label style="' + lbl + '">Address Line 2 (postal)</label><input type="text" id="shipAddr2" style="' + inp + '"></div>' +
+        '<div><label style="' + lbl + '">Attn (Receiving)</label><input type="text" id="shipAttn" style="' + inp + '" placeholder="Store / Goods Inwards"></div>' +
+      '</div>';
+
+    cfg.parentNode.insertBefore(panel, cfg.nextSibling);
+  }
+
+  window.toggleShipFields = function () {
+    var diff = document.getElementById('shipDifferent');
+    var f = document.getElementById('shipFields');
+    if (f) f.style.display = (diff && diff.checked) ? 'grid' : 'none';
+  };
+
+  window.copyBillToShip = function () {
+    var map = { shipName: 'invCustName', shipAddr1: 'invAddr1', shipAddr2: 'invAddr2', shipAttn: 'invAttn' };
+    Object.keys(map).forEach(function (k) {
+      var dst = document.getElementById(k), src = document.getElementById(map[k]);
+      if (dst && src) dst.value = src.value;
+    });
+    var diff = document.getElementById('shipDifferent');
+    if (diff) { diff.checked = true; window.toggleShipFields(); }
+  };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectShipPanel);
+  else injectShipPanel();
+})();
+</script>
+
