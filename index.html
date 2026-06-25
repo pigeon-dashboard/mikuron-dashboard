@@ -8455,23 +8455,21 @@ function exportSOAPDF() {
       throw new Error('html2pdf library not loaded — cannot render PDF in browser');
     }
     var pages = window.buildInvoicePDFPages(d, printType);
-    var html  = buildPdfDocHTML(pages);
+    var css   = (typeof getPrintCSS === 'function') ? getPrintCSS() : '';
 
-    var iframe = document.createElement('iframe');
-    iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;';
-    document.body.appendChild(iframe);
+    // Render in the MAIN document — html2canvas is unreliable across iframe documents.
+    var holder = document.createElement('div');
+    holder.id = '__invPdfHolder';
+    holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;background:#fff;z-index:-1;';
+    holder.innerHTML = css + '<div id="__invPdfPages">' + pages + '</div>';
+    document.body.appendChild(holder);
 
     try {
-      var doc = iframe.contentWindow.document;
-      doc.open();
-      doc.write(html);
-      doc.close();
-
+      // wait for base64 logo/stamp images to decode
       await new Promise(function (resolve) {
-        var imgs = Array.prototype.slice.call(doc.images || []);
-        if (imgs.length === 0) { setTimeout(resolve, 150); return; }
-        var left = imgs.length;
-        var done = function () { if (--left <= 0) resolve(); };
+        var imgs = Array.prototype.slice.call(holder.querySelectorAll('img'));
+        if (!imgs.length) { setTimeout(resolve, 150); return; }
+        var left = imgs.length, done = function () { if (--left <= 0) resolve(); };
         imgs.forEach(function (im) {
           if (im.complete) { done(); }
           else { im.addEventListener('load', done); im.addEventListener('error', done); }
@@ -8479,20 +8477,27 @@ function exportSOAPDF() {
         setTimeout(resolve, 3000);
       });
 
+      var target = holder.querySelector('#__invPdfPages');
       var opt = {
         margin:      0,
-        filename:    'MPT-INV-' + d.inv_no + '.pdf',
         image:       { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 794, scrollX: 0, scrollY: 0 },
         jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak:   { mode: ['css', 'legacy'] }
       };
 
-      var blob = await html2pdf().set(opt).from(doc.body).outputPdf('blob');
+      var blob = await html2pdf().set(opt).from(target).outputPdf('blob');
       if (!blob || blob.size < 1000) throw new Error('html2pdf produced an empty PDF');
+
+      // TEMP DIAGNOSTIC — opens the rendered PDF locally BEFORE upload.
+      // Turn on by running:  window.__invPdfPreview = true   in the console.
+      if (window.__invPdfPreview) {
+        try { window.open(URL.createObjectURL(blob), '_blank'); } catch (e) {}
+      }
+
       return blob;
     } finally {
-      document.body.removeChild(iframe);
+      document.body.removeChild(holder);
     }
   }
 
