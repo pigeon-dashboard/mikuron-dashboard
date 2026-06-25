@@ -8862,13 +8862,13 @@ function exportSOAPDF() {
 
   // inject the launch button into the Invoice Register tab
   function injectButton(){
-    var panel = document.getElementById('panelInvoice'); if (!panel || document.getElementById('eiOpenBtn')) return;
+    if (document.getElementById('eiOpenBtn')) return;
     var btn = document.createElement('button');
     btn.id = 'eiOpenBtn';
     btn.textContent = '📧 Send e-Invoice';
     btn.onclick = openPanel;
-    btn.style.cssText = 'margin:10px 0;padding:9px 16px;border:0;border-radius:8px;background:#a32638;color:#fff;font-weight:600;font-size:13px;cursor:pointer;';
-    panel.insertBefore(btn, panel.firstChild);
+    btn.style.cssText = 'position:fixed;bottom:22px;right:22px;z-index:9000;padding:12px 18px;border:0;border-radius:30px;background:#a32638;color:#fff;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.25);';
+    document.body.appendChild(btn);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectButton);
   else injectButton();
