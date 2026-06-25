@@ -8451,20 +8451,49 @@ function exportSOAPDF() {
     });
   }
   async function renderInvoicePdfBlob(d, printType) {
+    if (typeof html2pdf === 'undefined') {
+      throw new Error('html2pdf library not loaded — cannot render PDF in browser');
+    }
     var pages = window.buildInvoicePDFPages(d, printType);
-    var html = buildPdfDocHTML(pages);   // full invoice HTML (same as browser print)
-    var form = new URLSearchParams();
-    form.append('action', 'html_to_pdf');
-    form.append('html', html);
-    form.append('name', 'MPT-INV-' + d.inv_no);
-    var resp = await fetch(WEBAPP_URL, { method: 'POST', body: form });
-    var text = await resp.text();
-    var j; try { j = JSON.parse(text); } catch(e){ var m=text.match(/\{[\s\S]*\}/); j = m?JSON.parse(m[0]):null; }
-    if (!j || j.status !== 'ok' || !j.pdfBase64) throw new Error('server PDF failed: ' + (j && j.message || text.slice(0,120)));
-    var bin = atob(j.pdfBase64);
-    var bytes = new Uint8Array(bin.length);
-    for (var i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
-    return new Blob([bytes], { type: 'application/pdf' });
+    var html  = buildPdfDocHTML(pages);
+
+    var iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;';
+    document.body.appendChild(iframe);
+
+    try {
+      var doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      await new Promise(function (resolve) {
+        var imgs = Array.prototype.slice.call(doc.images || []);
+        if (imgs.length === 0) { setTimeout(resolve, 150); return; }
+        var left = imgs.length;
+        var done = function () { if (--left <= 0) resolve(); };
+        imgs.forEach(function (im) {
+          if (im.complete) { done(); }
+          else { im.addEventListener('load', done); im.addEventListener('error', done); }
+        });
+        setTimeout(resolve, 3000);
+      });
+
+      var opt = {
+        margin:      0,
+        filename:    'MPT-INV-' + d.inv_no + '.pdf',
+        image:       { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:   { mode: ['css', 'legacy'] }
+      };
+
+      var blob = await html2pdf().set(opt).from(doc.body).outputPdf('blob');
+      if (!blob || blob.size < 1000) throw new Error('html2pdf produced an empty PDF');
+      return blob;
+    } finally {
+      document.body.removeChild(iframe);
+    }
   }
 
   async function persistInvoice(d, printType) {
