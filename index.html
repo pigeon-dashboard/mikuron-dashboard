@@ -8458,12 +8458,12 @@ function exportSOAPDF() {
     document.body.appendChild(iframe);
     var idoc = iframe.contentWindow.document;
     idoc.open(); idoc.write(buildPdfDocHTML(pages)); idoc.close();
-    await wait(450);
+    await wait(1500);
     try { iframe.style.height = (idoc.body.scrollHeight + 40) + 'px'; } catch (e) {}
     await wait(60);
     var opt = {
       margin: 0, image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 794 },
+     html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 794, windowHeight: idoc.body.scrollHeight + 60, scrollX: 0, scrollY: 0 },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'], after: '.page' }
     };
