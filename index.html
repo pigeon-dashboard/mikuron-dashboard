@@ -8543,7 +8543,7 @@ function exportSOAPDF() {
     // page is captured.
     var holder = document.createElement('div');
     holder.id = '__invPdfHolder';
-    holder.style.cssText = 'position:fixed;left:0;top:0;width:190mm;padding-left:4mm;background:#fff;' +
+    holder.style.cssText = 'position:fixed;left:0;top:0;width:186mm;background:#fff;' +
       'opacity:0;z-index:-9999;pointer-events:none;';
     holder.innerHTML = PDF_CSS + '<div id="__invPdfPages" style="padding-left:10mm;">' + pages + '</div>';
     document.body.appendChild(holder);
