@@ -8003,7 +8003,7 @@ function exportSOAPDF() {
         '<td class="num">' + row.ordered.toLocaleString() + '</td>' +
         '<td class="num">' + row.delivered.toLocaleString() + '</td>' +
         '<td class="num bal" style="color:' + (row.balance > 0 ? '#dc2626' : '#16a34a') + '">' +
-            (row.closed ? '—' : qtyCell === invQty || qtyCell.indexOf('input') === -1 ? row.balance.toLocaleString() : row.balance.toLocaleString()) + '</td>' +
+            (row.closed ? '—' : (checked ? qtyCell : row.balance.toLocaleString())) + '</td>' +
         '<td class="num">' + fmtMoney(row.price) + '</td>' +
         '<td>' + esc(row.delivery || '—') + '</td>' +
         '<td>' + statusBadge + '</td>' +
