@@ -9028,7 +9028,42 @@ function exportSOAPDF() {
   // as the invoice renderer we fixed: on-screen invisible, 186mm, margins via jsPDF).
   async function renderScPoPdfBlob(pageHtml){
     if (typeof html2pdf === 'undefined') throw new Error('html2pdf not loaded');
-    var css = (typeof getPrintCSS === 'function') ? getPrintCSS() : '';
+    var css =
+      '<style>' +
+      '*{box-sizing:border-box;}' +
+      'html,body{margin:0;padding:0;background:#fff;}' +
+      'body{font-family:Arial,sans-serif;font-size:12px;color:#000;}' +
+      '.page{width:186mm;min-height:269mm;padding:0;background:#fff;' +
+        'page-break-after:always;break-after:page;position:relative;overflow:hidden;}' +
+      '.page:last-child{page-break-after:avoid;break-after:auto;}' +
+      '.header{display:flex;justify-content:space-between;align-items:flex-start;' +
+        'margin-bottom:12px;border-bottom:1.5px solid #ccc;padding-bottom:10px;}' +
+      '.header-logo img{height:75px;width:auto;}' +
+      '.company-info,.co-details{flex:1;padding:0 14px;font-size:11px;line-height:1.6;}' +
+      '.company-info .co-name{font-size:17px;font-weight:900;margin-bottom:3px;}' +
+      '.company-info .co-name span{color:#dc2626;}' +
+      '.title-box{border:2px solid #000;padding:10px 20px;text-align:center;' +
+        'align-self:flex-start;min-width:150px;}' +
+      '.title-box h1{font-size:20px;margin:0;letter-spacing:1px;}' +
+      '.info-grid{display:flex;gap:0 20px;margin-bottom:10px;}' +
+      '.info-grid>div{flex:1;}' +
+      '.info-left table,.info-right table{font-size:12px;width:100%;border-collapse:collapse;}' +
+      '.info-left td,.info-right td{padding:3px 5px;vertical-align:top;}' +
+      '.info-right td:first-child{font-weight:bold;white-space:nowrap;color:#333;}' +
+      '.items-table{width:100%;border-collapse:collapse;margin-bottom:8px;}' +
+      '.items-table th{background:#374151;color:#fff;border:1px solid #374151;' +
+        'padding:6px 9px;font-size:11px;text-transform:uppercase;text-align:left;}' +
+      '.items-table td{border:1px solid #d1d5db;padding:6px 9px;font-size:11px;vertical-align:top;}' +
+      '.items-table tr:nth-child(even) td{background:#f9fafb;}' +
+      'table{border-collapse:collapse;}' +
+      'td,th{vertical-align:top;}' +
+      '.totals{float:right;width:270px;margin-top:6px;}' +
+      '.totals table{width:100%;font-size:12px;border-collapse:collapse;}' +
+      '.totals td{padding:4px 7px;}' +
+      '.totals td:last-child{text-align:right;font-weight:bold;}' +
+      '.footer-row{clear:both;display:flex;justify-content:space-between;' +
+        'align-items:flex-end;margin-top:24px;font-size:11px;}' +
+      '</style>';
     var holder = document.createElement('div');
     holder.style.cssText = 'position:fixed;left:0;top:0;width:186mm;background:#fff;opacity:0;z-index:-9999;pointer-events:none;';
     holder.innerHTML = css + '<div id="__scpoPages" style="padding-left:10mm;">' + pageHtml + '</div>';
