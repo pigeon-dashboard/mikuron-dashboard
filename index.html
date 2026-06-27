@@ -9242,6 +9242,7 @@ function exportSOAPDF() {
         vendorAttn: (document.getElementById('subconVendorAttn')||{}).value || '',
         remarks: (document.getElementById('subconPoRemarks')||{}).value || '',
         entity: 'mptmfg'
+      };
            // Normalise poDate to YYYY-MM-DD (handles DD/MM/YYYY, YYYY-MM-DD, or Date input)
       (function(){
         var raw = String(meta.poDate || '').trim();
@@ -9254,7 +9255,7 @@ function exportSOAPDF() {
           if (!isNaN(d)) meta.poDate = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
         }
       })();
-      };
+      
       var items = (typeof subconData !== 'undefined')
         ? subconData.filter(function(r){ return subconSelectedGroups.has(r.customerGroup); })
         : [];
