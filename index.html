@@ -9001,3 +9001,248 @@ function exportSOAPDF() {
   window.__eInvoicePanel = true;
 })();
 </script>
+<!--
+  ════════════════════════════════════════════════════════════════════════════
+  TAB 2 — SUBCONTRACT PO REGISTER (save PDF to Drive + Sheet, list + reprint)
+  Pairs with handleSaveSubcontractPO / handleGetSubcontractRegister in the .gs
+  ════════════════════════════════════════════════════════════════════════════
+-->
+<script>
+(function () {
+  if (window.__scpoRegister) return;
+
+  window.subcontractRegister = window.subcontractRegister || [];
+  window.__scpoStore = window.__scpoStore || {};   // poNo -> full print data for reprint
+
+  function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function rm(v){ var n=Number(v); return isNaN(n)?'-':'RM '+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+  function blobToBase64(blob){
+    return new Promise(function(res,rej){
+      var fr=new FileReader(); fr.onload=function(){res(String(fr.result).split(',')[1]);}; fr.onerror=rej; fr.readAsDataURL(blob);
+    });
+  }
+
+  // Render the subcontract PO page HTML to a clean A4 PDF blob (same technique
+  // as the invoice renderer we fixed: on-screen invisible, 186mm, margins via jsPDF).
+  async function renderScPoPdfBlob(pageHtml){
+    if (typeof html2pdf === 'undefined') throw new Error('html2pdf not loaded');
+    var css = (typeof getPrintCSS === 'function') ? getPrintCSS() : '';
+    var holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:0;top:0;width:186mm;background:#fff;opacity:0;z-index:-9999;pointer-events:none;';
+    holder.innerHTML = css + '<div id="__scpoPages" style="padding-left:10mm;">' + pageHtml + '</div>';
+    document.body.appendChild(holder);
+    try {
+      await new Promise(function(resolve){
+        var imgs = Array.prototype.slice.call(holder.querySelectorAll('img'));
+        if (!imgs.length){ setTimeout(resolve,150); return; }
+        var left=imgs.length, done=function(){ if(--left<=0) resolve(); };
+        imgs.forEach(function(im){ if(im.complete && im.naturalWidth) done(); else { im.addEventListener('load',done); im.addEventListener('error',done);} });
+        setTimeout(resolve,4000);
+      });
+      await wait(120);
+      var target = holder.querySelector('#__scpoPages');
+      var opt = {
+        margin: [14, 12, 14, 8],
+        image: { type:'jpeg', quality:0.96 },
+        html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', width:target.scrollWidth, windowWidth:target.scrollWidth, scrollX:0, scrollY:0 },
+        jsPDF: { unit:'mm', format:'a4', orientation:'portrait', compress:true },
+        pagebreak: { mode:['css','legacy'] }
+      };
+      var blob = await html2pdf().set(opt).from(target).outputPdf('blob');
+      if (!blob || blob.size < 1500) throw new Error('Empty PDF ('+(blob?blob.size:0)+' bytes)');
+      return blob;
+    } finally { if (holder.parentNode) holder.parentNode.removeChild(holder); }
+  }
+
+  // Persist one PO: render PDF, POST to Apps Script, push to local register.
+  async function persistScPo(meta, items, pageHtml){
+    var total = items.reduce(function(s,r){ return s + (Number(r.totalMYR)||0); }, 0);
+    var rec = {
+      poNo: String(meta.poNo), poDate: meta.poDate, vendorName: meta.vendorName,
+      vendorAddress: meta.vendorAddress, vendorAttn: meta.vendorAttn,
+      deliveryTerms: meta.deliveryTerms, remarks: meta.remarks, entity: meta.entity || 'mptmfg',
+      currency: 'MYR', total: total, status: 'Active', fileUrl:'', fileId:''
+    };
+    // local-first so it shows instantly
+    window.subcontractRegister = window.subcontractRegister.filter(function(r){ return r.poNo !== rec.poNo; });
+    window.subcontractRegister.push(rec);
+    window.__scpoStore[rec.poNo] = { pageHtml: pageHtml };
+    renderSubcontractRegister();
+
+    if (typeof WEBAPP_URL === 'undefined' || !WEBAPP_URL) return;
+
+    var form = new URLSearchParams();
+    form.append('action','save_subcontract_po');
+    form.append('poNo', rec.poNo);
+    form.append('poDate', rec.poDate || '');
+    form.append('vendorName', rec.vendorName || '');
+    form.append('vendorAddress', rec.vendorAddress || '');
+    form.append('vendorAttn', rec.vendorAttn || '');
+    form.append('deliveryTerms', rec.deliveryTerms || '');
+    form.append('remarks', rec.remarks || '');
+    form.append('entity', rec.entity || '');
+    form.append('currency', 'MYR');
+    form.append('total', String(total));
+    form.append('status','Active');
+    form.append('linesJson', JSON.stringify(items.map(function(it){
+      return { internalCode:it.internalCode||'', item:it.item||'', drawingNo:it.drawingNo||'',
+               lotNo:it.lotNo||'', description:it.description||'', qty:Number(it.qty)||0,
+               unitCostMYR:Number(it.unitCostMYR)||0, totalMYR:Number(it.totalMYR)||0,
+               requestedDelivery:it.requestedDelivery||'' };
+    })));
+
+    try {
+      var blob = await renderScPoPdfBlob(pageHtml);
+      form.append('fileName', 'MPT-SC-PO-'+rec.poNo+'_'+new Date().toISOString().slice(0,10)+'.pdf');
+      form.append('mimeType','application/pdf');
+      form.append('fileData', await blobToBase64(blob));
+    } catch(e){ console.error('SC-PO PDF render failed (record still saved):', e); }
+
+    try {
+      var resp = await fetch(WEBAPP_URL, { method:'POST', body:form });
+      var text = await resp.text(), json;
+      try { json = JSON.parse(text); } catch(e){ var m=text.match(/\{[\s\S]*\}/); json = m?JSON.parse(m[0]):{status:'error',message:text.slice(0,160)}; }
+      console.log('save_subcontract_po response for MPT/SC-PO/'+rec.poNo+':', json);
+      if (json && json.fileUrl){ rec.fileUrl = json.fileUrl; rec.fileId = json.fileId||''; renderSubcontractRegister(); }
+    } catch(e){ console.error('SC-PO save POST failed:', e); }
+  }
+
+  // Load existing POs from the Sheet on demand
+  window.loadSubcontractRegister = async function(){
+    if (typeof WEBAPP_URL === 'undefined' || !WEBAPP_URL) return;
+    try {
+      var json = await jsonpCall({ action:'get_subcontract_register' }, 15000);
+      if (json && json.status === 'ok'){
+        var driveNos = {}; (json.records||[]).forEach(function(r){ driveNos[r.poNo]=true; });
+        var localOnly = window.subcontractRegister.filter(function(r){ return !driveNos[r.poNo]; });
+        window.subcontractRegister = (json.records||[]).concat(localOnly);
+        renderSubcontractRegister();
+      }
+    } catch(e){ console.warn('loadSubcontractRegister failed:', e.message); }
+  };
+
+  // Draw the register table at the bottom of Tab 2 (#panelSubcon)
+  window.renderSubcontractRegister = function(){
+    var panel = document.getElementById('panelSubcon');
+    if (!panel) return;
+    var host = document.getElementById('scpoRegisterHost');
+    if (!host){
+      host = document.createElement('div');
+      host.id = 'scpoRegisterHost';
+      host.style.cssText = 'margin-top:24px;';
+      panel.appendChild(host);
+    }
+    var rows = window.subcontractRegister.slice().sort(function(a,b){
+      return String(b.poNo).localeCompare(String(a.poNo), undefined, {numeric:true});
+    });
+    var body = rows.length ? rows.map(function(r){
+      var pdf = r.fileUrl
+        ? '<a href="'+r.fileUrl+'" target="_blank" style="color:#1e3a8a;text-decoration:underline;font-size:12px;">PO PDF ↗</a>'
+        : '<span style="font-size:11px;color:#94a3b8;">Saving…</span>';
+      var reprint = (window.__scpoStore[r.poNo] || r.fileUrl)
+        ? '<button onclick="reprintScPo(\''+String(r.poNo).replace(/'/g,'')+'\')" style="margin-top:3px;display:block;font-size:11px;padding:3px 8px;border:1px solid #1e3a8a;border-radius:5px;background:#eff6ff;color:#1e3a8a;cursor:pointer;">🖨 Reprint</button>'
+        : '';
+      var entityBadge = '<span style="font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;'+
+        (r.entity==='mikuron'?'background:#dbeafe;color:#1e40af;':'background:#fef3c7;color:#92400e;')+'">'+
+        (r.entity==='mikuron'?'Mikuron SG':'MPT Mfg')+'</span>';
+      return '<tr style="border-bottom:1px solid #eef2f7;">'+
+        '<td style="padding:8px 12px;font-weight:600;">MPT/SC-PO/'+esc(r.poNo)+entityBadge+'</td>'+
+        '<td style="padding:8px 12px;">'+esc(r.poDate||'-')+'</td>'+
+        '<td style="padding:8px 12px;">'+esc(r.vendorName||'-')+'</td>'+
+        '<td style="padding:8px 12px;text-align:right;">'+rm(r.total)+'</td>'+
+        '<td style="padding:8px 12px;text-align:center;"><span class="badge '+(r.status==='Cancelled'?'onhold':'shipped')+'">'+esc(r.status||'Active')+'</span></td>'+
+        '<td style="padding:8px 12px;">'+pdf+reprint+'</td>'+
+      '</tr>';
+    }).join('') : '<tr><td colspan="6" style="text-align:center;padding:24px;color:#94a3b8;">No Subcontract POs generated yet.</td></tr>';
+
+    host.innerHTML =
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'+
+        '<h3 style="margin:0;font-size:15px;">Subcontract PO Register</h3>'+
+        '<button onclick="loadSubcontractRegister()" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-size:12px;">🔄 Sync from Drive</button>'+
+      '</div>'+
+      '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:13px;">'+
+        '<thead><tr style="background:#9a3412;color:#fff;text-align:left;">'+
+          '<th style="padding:9px 12px;">PO No</th><th style="padding:9px 12px;">PO Date</th>'+
+          '<th style="padding:9px 12px;">Vendor</th><th style="padding:9px 12px;text-align:right;">Total (MYR)</th>'+
+          '<th style="padding:9px 12px;text-align:center;">Status</th><th style="padding:9px 12px;">PO PDF</th>'+
+        '</tr></thead><tbody>'+body+'</tbody>'+
+      '</table></div>';
+  };
+
+  window.reprintScPo = function(poNo){
+    var d = window.__scpoStore[poNo];
+    if (d && d.pageHtml){
+      var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'+
+        '<title>Subcontract PO MPT-SC-PO-'+poNo+'</title>'+
+        (typeof getPrintCSS==='function'?getPrintCSS():'')+
+        '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},400);});<\/script>'+
+        '</head><body>'+d.pageHtml+'</body></html>';
+      var w = window.open('','_blank','width=950,height=750');
+      if (!w){ alert('Allow pop-ups to reprint.'); return; }
+      w.document.write(html); w.document.close(); return;
+    }
+    var rec = window.subcontractRegister.filter(function(r){ return r.poNo===poNo; })[0];
+    if (rec && rec.fileUrl){ window.open(rec.fileUrl,'_blank'); return; }
+    alert('No reprint source for MPT/SC-PO/'+poNo+'.');
+  };
+
+  // ── Hook generateSubcontractPOPDF: capture meta+items+html, then persist ─────
+  function hookGenerate(){
+    if (typeof window.generateSubcontractPOPDF !== 'function' || window.__scpoGenHooked) return;
+    var orig = window.generateSubcontractPOPDF;
+    window.generateSubcontractPOPDF = function(){
+      // Snapshot the inputs BEFORE the original runs (it bumps the PO counter)
+      var poNoField = document.getElementById('subconPoNo');
+      var poNoVal = poNoField ? parseInt(poNoField.value,10) : null;
+      var meta = {
+        poNo: poNoVal,
+        poDate: (document.getElementById('subconPoDate')||{}).value || new Date().toISOString().slice(0,10),
+        deliveryTerms: (document.getElementById('subconPoDeliveryTerms')||{}).value || '',
+        vendorName: (document.getElementById('subconVendorName')||{}).value || '',
+        vendorAddress: (document.getElementById('subconVendorAddress')||{}).value || '',
+        vendorAttn: (document.getElementById('subconVendorAttn')||{}).value || '',
+        remarks: (document.getElementById('subconPoRemarks')||{}).value || '',
+        entity: 'mptmfg'
+      };
+      var items = (typeof subconData !== 'undefined')
+        ? subconData.filter(function(r){ return subconSelectedGroups.has(r.customerGroup); })
+        : [];
+
+      // Rebuild the same page HTML the original prints, so we save an identical PDF
+      var pageHtml = '';
+      try {
+        if (typeof buildSubcontractPOPage === 'function' && items.length){
+          pageHtml = buildSubcontractPOPage(meta.poNo, meta.poDate, meta.deliveryTerms,
+            meta.vendorName, meta.vendorAddress, meta.vendorAttn, meta.remarks, items);
+        }
+      } catch(e){ console.error('rebuild SC-PO page failed:', e); }
+
+      var res = orig.apply(this, arguments); // prints + bumps counter
+
+      if (items.length && meta.poNo != null && pageHtml){
+        persistScPo(meta, items, pageHtml);
+      }
+      return res;
+    };
+    window.__scpoGenHooked = true;
+  }
+
+  // Re-render register when Tab 2 is opened; load from Drive once in background
+  function hookSwitchTab(){
+    if (typeof window.switchTab !== 'function' || window.__scpoTabHooked) return;
+    var orig = window.switchTab;
+    window.switchTab = function(tab){
+      var r = orig.apply(this, arguments);
+      if (tab === 'subcon'){ try { renderSubcontractRegister(); } catch(e){} }
+      return r;
+    };
+    window.__scpoTabHooked = true;
+  }
+
+  function boot(){ hookGenerate(); hookSwitchTab(); setTimeout(function(){ try{ loadSubcontractRegister(); }catch(e){} }, 3000); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  window.__scpoRegister = true;
+})();
+</script>
