@@ -8454,53 +8454,110 @@ function exportSOAPDF() {
     if (typeof html2pdf === 'undefined') {
       throw new Error('html2pdf library not loaded — cannot render PDF in browser');
     }
-    var pages = window.buildInvoicePDFPages(d, printType);
-    var css   = (typeof getPrintCSS === 'function') ? getPrintCSS() : '';
 
-    // Render in the MAIN document — html2canvas is unreliable across iframe documents.
+    // Clean A4 CSS tuned for html2pdf. Explicit mm page boxes so each .page is a
+    // full A4, and NO ::after overlay / user-select hacks (those make
+    // html2canvas render blank/partial pages — the corruption you were seeing).
+    var PDF_CSS =
+      '<style>' +
+      '*{box-sizing:border-box;}' +
+      'html,body{margin:0;padding:0;background:#fff;}' +
+      'body{font-family:Arial,sans-serif;font-size:12px;color:#000;}' +
+      '.page{width:210mm;min-height:297mm;padding:14mm 12mm;background:#fff;' +
+        'page-break-after:always;break-after:page;position:relative;overflow:hidden;}' +
+      '.page:last-child{page-break-after:avoid;break-after:auto;}' +
+      '.page-copy-label{text-align:right;font-size:11px;font-weight:700;color:#64748b;' +
+        'text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;' +
+        'border-bottom:1px solid #e5e7eb;padding-bottom:3px;}' +
+      '.header{display:flex;justify-content:space-between;align-items:flex-start;' +
+        'margin-bottom:12px;border-bottom:1.5px solid #ccc;padding-bottom:10px;}' +
+      '.header-logo img{height:75px;width:auto;}' +
+      '.company-info{flex:1;padding:0 14px;font-size:11px;line-height:1.6;}' +
+      '.company-info .co-name{font-size:17px;font-weight:900;margin-bottom:3px;}' +
+      '.company-info .co-name span{color:#dc2626;}' +
+      '.company-info .co-details{color:#222;}' +
+      '.title-box{border:2px solid #000;padding:10px 20px;text-align:center;' +
+        'align-self:flex-start;min-width:150px;}' +
+      '.title-box h1{font-size:20px;margin:0;letter-spacing:1px;}' +
+      '.info-grid{display:flex;gap:0 20px;margin-bottom:10px;}' +
+      '.info-grid>div{flex:1;}' +
+      '.info-left table,.info-right table{font-size:12px;width:100%;border-collapse:collapse;}' +
+      '.info-left td,.info-right td{padding:3px 5px;vertical-align:top;}' +
+      '.info-right td:first-child{font-weight:bold;white-space:nowrap;color:#333;}' +
+      '.items-table{width:100%;border-collapse:collapse;margin-bottom:8px;}' +
+      '.items-table th{background:#374151;color:#fff;border:1px solid #374151;' +
+        'padding:6px 9px;font-size:11px;text-transform:uppercase;text-align:left;}' +
+      '.items-table td{border:1px solid #d1d5db;padding:6px 9px;font-size:11px;vertical-align:top;}' +
+      '.items-table tr:nth-child(even) td{background:#f9fafb;}' +
+      '.clearfix::after{content:"";display:table;clear:both;}' +
+      '.totals{float:right;width:270px;margin-top:6px;}' +
+      '.totals table{width:100%;font-size:12px;border-collapse:collapse;}' +
+      '.totals td{padding:4px 7px;}' +
+      '.totals td:last-child{text-align:right;font-weight:bold;}' +
+      '.total-grand td{border-top:2px solid #000;font-size:14px;font-weight:bold;background:#f3f4f6;}' +
+      '.footer-row{clear:both;display:flex;justify-content:space-between;' +
+        'align-items:flex-end;margin-top:24px;font-size:11px;}' +
+      '.footer-terms{width:50%;line-height:1.7;}' +
+      '.stamp-wrap{width:46%;text-align:center;position:relative;}' +
+      '.stamp-img{width:240px;max-width:100%;height:auto;display:block;margin:0 auto 4px;opacity:.95;}' +
+      '.stamp-caption{border-top:1.5px solid #000;padding-top:5px;font-size:11px;font-weight:600;color:#222;}' +
+      '</style>';
+
+    var pages = window.buildInvoicePDFPages(d, printType); // 1 Invoice + 2 DO
+
+    // Render ON-SCREEN but invisible. left:-10000px makes html2canvas capture a
+    // blank/partial canvas; opacity:0 keeps the geometry correct so the whole
+    // page is captured.
     var holder = document.createElement('div');
     holder.id = '__invPdfHolder';
-    holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;background:#fff;z-index:-1;';
-    holder.innerHTML = css + '<div id="__invPdfPages">' + pages + '</div>';
+    holder.style.cssText = 'position:fixed;left:0;top:0;width:210mm;background:#fff;' +
+      'opacity:0;z-index:-9999;pointer-events:none;';
+    holder.innerHTML = PDF_CSS + '<div id="__invPdfPages">' + pages + '</div>';
     document.body.appendChild(holder);
 
     try {
-      // wait for base64 logo/stamp images to decode
+      // Wait for the base64 logo/stamp images to decode before capturing
       await new Promise(function (resolve) {
         var imgs = Array.prototype.slice.call(holder.querySelectorAll('img'));
         if (!imgs.length) { setTimeout(resolve, 150); return; }
         var left = imgs.length, done = function () { if (--left <= 0) resolve(); };
         imgs.forEach(function (im) {
-          if (im.complete) { done(); }
+          if (im.complete && im.naturalWidth) { done(); }
           else { im.addEventListener('load', done); im.addEventListener('error', done); }
         });
-        setTimeout(resolve, 3000);
+        setTimeout(resolve, 4000); // hard cap so we never hang
       });
+      await new Promise(function (r) { setTimeout(r, 120); }); // let layout settle
 
       var target = holder.querySelector('#__invPdfPages');
       var opt = {
-        margin:      0,
-        image:       { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 794, scrollX: 0, scrollY: 0 },
-        jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak:   { mode: ['css', 'legacy'] }
+        margin: 0,
+        image: { type: 'jpeg', quality: 0.96 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          windowWidth: target.scrollWidth,
+          windowHeight: target.scrollHeight,
+          scrollX: 0,
+          scrollY: 0
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+        pagebreak: { mode: ['css', 'legacy'] }   // CSS .page breaks drive pagination
       };
 
       var blob = await html2pdf().set(opt).from(target).outputPdf('blob');
-      if (!blob || blob.size < 1000) throw new Error('html2pdf produced an empty PDF');
-
-      // TEMP DIAGNOSTIC — opens the rendered PDF locally BEFORE upload.
-      // Turn on by running:  window.__invPdfPreview = true   in the console.
-      if (window.__invPdfPreview) {
-        try { window.open(URL.createObjectURL(blob), '_blank'); } catch (e) {}
+      if (!blob || blob.size < 1500) {
+        throw new Error('Rendered PDF is empty (' + (blob ? blob.size : 0) + ' bytes)');
       }
 
+      // Diagnostic: run  window.__invPdfPreview = true  in console to eyeball it
+      if (window.__invPdfPreview) { try { window.open(URL.createObjectURL(blob), '_blank'); } catch (e) {} }
       return blob;
     } finally {
-      document.body.removeChild(holder);
+      if (holder.parentNode) holder.parentNode.removeChild(holder);
     }
   }
-
   async function persistInvoice(d, printType) {
     var items = d.items || [];
     var subtotal = items.reduce(function (s, i) { return s + ((Number(i.unit_price) || 0) * (Number(i.qty) || 0)); }, 0);
