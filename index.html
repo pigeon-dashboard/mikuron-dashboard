@@ -3168,13 +3168,45 @@ function renderInvoiceTab() {
   }
 
   // Build groups using rowVal — works with both sample and live data
+  // Read the shared filter state used by the Filters & Search panel so the
+  // Grouped view filters identically to the Table view.
+  var F = window.invTableState || {};
+  var fSearch = (F.search || '').trim().toLowerCase();
+  var fCust   = F.customer || '';
+  var fStatus = F.status || '';      // 'Open' | 'Partial' | 'Closed'
+  var fBalOnly = !!F.balanceOnly;
+
   var allGroupsMap = new Map();
   allData.forEach(function(r, idx) {
     var poNo   = rowVal(r, 'Customer PO No').trim();
     var custNm = rowVal(r, 'Customer Name').trim();
     if (!poNo || poNo === 'REVIEW REQUIRED' || poNo === 'Unknown PO') return;
     if (!custNm || custNm === 'Unknown Customer') return;
+
+    // Customer: honour BOTH the old top-bar filter and the panel's customer dropdown
     if (invCustFilter && custNm !== invCustFilter) return;
+    if (fCust && custNm !== fCust) return;
+
+    var itemKey = poNo + '||' + custNm + '||' + idx; // for delivered lookup below
+    var realKey = poNo + '||' + custNm + '||' + idx;
+    var lineKey = (poNo + '||' + custNm) + '||' + idx;
+
+    // Per-line status + balance (mirrors the table's logic)
+    var ordered   = parseFloat(rowVal(r, 'Qty')) || 0;
+    var delivered = (typeof lineItemDelivered !== 'undefined' && lineItemDelivered[lineKey]) || 0;
+    var balance   = Math.max(0, ordered - delivered);
+    var status    = (ordered > 0 && delivered >= ordered) ? 'Closed' : (delivered > 0 ? 'Partial' : 'Open');
+
+    if (fStatus && status !== fStatus) return;
+    if (fBalOnly && balance <= 0) return;
+
+    if (fSearch) {
+      var hay = (custNm + ' ' + poNo + ' ' +
+                 rowVal(r, 'Item') + ' ' + rowVal(r, 'Drawing No') + ' ' +
+                 rowVal(r, 'Description') + ' ' + rowVal(r, 'PR No')).toLowerCase();
+      if (hay.indexOf(fSearch) === -1) return;
+    }
+
     var key = poNo + '||' + custNm;
     if (!allGroupsMap.has(key)) allGroupsMap.set(key, []);
     allGroupsMap.get(key).push(Object.assign({}, r, {__globalIdx: idx}));
@@ -7995,7 +8027,8 @@ function exportSOAPDF() {
     S.customer    = (document.getElementById('invtblCustomer') || {}).value || '';
     S.status      = (document.getElementById('invtblStatus')   || {}).value || '';
     S.balanceOnly = !!(document.getElementById('invtblBalanceOnly') || {}).checked;
-    window.renderInvoiceLineTable();
+    if (S.view === 'table') window.renderInvoiceLineTable();
+    else if (typeof window.renderInvoiceTab === 'function') window.renderInvoiceTab();
   };
 
   window.clearInvTableFilters = function () {
