@@ -9222,6 +9222,18 @@ function exportSOAPDF() {
     var rec = window.subcontractRegister.filter(function(r){ return r.poNo===poNo; })[0];
     if (rec && rec.fileUrl){ window.open(rec.fileUrl,'_blank'); return; }
     alert('No reprint source for MPT/SC-PO/'+poNo+'.');
+       // Normalise poDate to YYYY-MM-DD (handles DD/MM/YYYY, YYYY-MM-DD, or Date input)
+      (function(){
+        var raw = String(meta.poDate || '').trim();
+        var m;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) { /* already good */ }
+        else if ((m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) {
+          meta.poDate = m[3] + '-' + ('0'+m[2]).slice(-2) + '-' + ('0'+m[1]).slice(-2);
+        } else {
+          var d = new Date(raw);
+          if (!isNaN(d)) meta.poDate = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+        }
+      })();
   };
 
   // ── Hook generateSubcontractPOPDF: capture meta+items+html, then persist ─────
