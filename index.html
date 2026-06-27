@@ -9078,6 +9078,7 @@ function exportSOAPDF() {
       });
       await wait(120);
       var target = holder.querySelector('#__scpoPages');
+         console.log('SCPO render — scrollWidth:', target.scrollWidth, 'scrollHeight:', target.scrollHeight, 'innerHTML len:', target.innerHTML.length);
       var opt = {
         margin: [14, 12, 14, 8],
         image: { type:'jpeg', quality:0.96 },
@@ -9278,6 +9279,7 @@ function exportSOAPDF() {
 
   function boot(){ hookGenerate(); hookSwitchTab(); setTimeout(function(){ try{ loadSubcontractRegister(); }catch(e){} }, 3000); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+     window.renderScPoPdfBlob = renderScPoPdfBlob;   // expose for debugging
   window.__scpoRegister = true;
 })();
 </script>
