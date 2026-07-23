@@ -638,6 +638,7 @@
         </select>
         <button class="export-btn" onclick="generateInvoiceXLSX()" id="genXlsxBtnTop" disabled>⬇ Export to Excel</button>
         <button class="generate-btn" onclick="generateInvoicePDF()" id="genPdfBtnTop" disabled>🖨 Create Invoice + DO (PDF)</button>
+        <button class="export-btn" onclick="printInvoiceLabels()" id="lblBtnTop">🏷 Print Labels 60×40</button>
       </div>
     </div>
 
@@ -721,6 +722,7 @@
         </select>
         <button class="export-btn" onclick="generateInvoiceXLSX()" id="genXlsxBtn" disabled>⬇ Export to Excel</button>
         <button class="generate-btn" onclick="generateInvoicePDF()" id="genPdfBtn" disabled>🖨 Create Invoice + DO (PDF)</button>
+        <button class="export-btn" onclick="printInvoiceLabels()" id="lblBtn">🏷 Print Labels 60×40</button>
       </div>
     </div>
 
@@ -3596,6 +3598,20 @@ function generateInvoicePDF() {
     if (dataArr.length === 0) { alert('Nothing to generate.'); return; }
 
     // Record all invoices first (so register updates instantly)
+
+    // capture label rows before the selection is cleared below
+    window.__lastLabelRows = [];
+    dataArr.forEach(function(d) {
+      d.items.forEach(function(it) {
+        window.__lastLabelRows.push({
+          po:   d.po_ref || '',
+          pr:   it.prNo  || d.pr_ref || '',
+          item: it.item  || '',
+          qty:  it.qty
+        });
+      });
+    });
+
     dataArr.forEach(data => recordInvoiceAndUpdateStatus(data, data.inv_no));
 
     // ── DIRECT synchronous push to invoiceRegister ─────────────────────────────
@@ -3654,6 +3670,147 @@ function generateInvoicePDF() {
     isGeneratingInvoice = false;
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 60×40mm ROLL LABELS — Customer PO / PR No / Item / Qty / Date
+// Prints in a separate window so this page's A4 @page rules are untouched.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Build label rows from the CURRENT Tab-3 selection.
+// NOTE: deliberately does NOT call buildInvoiceDataPerPO() — that calls
+// assignInvNos() and would consume invoice numbers from the sequence.
+function buildLabelRowsFromSelection() {
+  var gm = window.__invAllGroupsMap || new Map();
+  var rows = [];
+  invSelectedItems.forEach(function (itemKey) {
+    gm.forEach(function (grpRows, poKey) {
+      grpRows.forEach(function (r) {
+        if ((poKey + '||' + r.__globalIdx) !== itemKey) return;
+        var ordQty = parseFloat(rowVal(r, 'Qty')) || 0;
+        var delvd  = lineItemDelivered[itemKey] || 0;
+        var remain = Math.max(0, ordQty - delvd);
+        var qty    = invDeliveryQtys[itemKey] !== undefined ? invDeliveryQtys[itemKey] : remain;
+        if (qty > 0) rows.push({
+          po:   rowVal(r, 'Customer PO No') || '',
+          pr:   rowVal(r, 'PR No') || '',
+          item: rowVal(r, 'Item') || '',
+          qty:  qty
+        });
+      });
+    });
+  });
+  return rows;
+}
+
+function printInvoiceLabels() {
+  var rows = buildLabelRowsFromSelection();
+  if (!rows.length && window.__lastLabelRows && window.__lastLabelRows.length) {
+    rows = window.__lastLabelRows;          // fall back to the last generated invoice
+  }
+  if (!rows.length) {
+    alert('Select line items first (or generate an invoice), then print labels.');
+    return;
+  }
+  openLabelWindow(rows);
+}
+
+function openLabelWindow(rows) {
+  // ONE LABEL PER LINE — the same part no on separate PO lines stays separate,
+  // so split packing (e.g. 600 + 732 of 510702) prints two labels, not one.
+  var list = rows.map(function (r) {
+    return { po: r.po, pr: r.pr, item: r.item, qty: r.qty };
+  });
+
+  // DD/MM/YY from the invoice date field
+  var el  = document.getElementById('invDate');
+  var iso = (el && el.value) ? el.value : new Date().toISOString().slice(0, 10);
+  var d   = new Date(iso + 'T00:00:00');
+  var p2  = function (n) { return ('0' + n).slice(-2); };
+  var dateStr = p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + '/' + String(d.getFullYear()).slice(-2);
+
+  var win = window.open('', '_blank', 'width=820,height=760');
+  if (!win) { alert('Please allow pop-ups for this site to print labels.'); return; }
+  win.document.write(buildLabelWindowHTML(list, dateStr));
+  win.document.close();
+}
+
+function buildLabelWindowHTML(list, dateStr) {
+  var editRows = list.map(function (r, i) {
+    return '<tr>' +
+      '<td><input class="f po"   data-i="' + i + '" value="' + escapeHtml(r.po)   + '"></td>' +
+      '<td><input class="f pr"   data-i="' + i + '" value="' + escapeHtml(r.pr)   + '"></td>' +
+      '<td><input class="f item" data-i="' + i + '" value="' + escapeHtml(r.item) + '"></td>' +
+      '<td><input class="f qty"  data-i="' + i + '" type="number" step="any" value="' + r.qty + '"></td>' +
+      '<td><input class="f cop"  data-i="' + i + '" type="number" min="0" max="99" value="1"></td>' +
+    '</tr>';
+  }).join('');
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Labels 60x40</title><style>' +
+  '*{box-sizing:border-box}' +
+  'body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;color:#12161b;background:#eef1f4}' +
+  '.bar{position:sticky;top:0;background:#fff;border-bottom:1px solid #d5dce3;padding:14px 18px;z-index:5}' +
+  '.bar h1{margin:0 0 10px;font-size:13px;letter-spacing:.14em;text-transform:uppercase}' +
+  'table{border-collapse:collapse;width:100%;font-size:12.5px;background:#fff}' +
+  'th{text-align:left;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#6b7885;' +
+     'padding:6px 8px;border-bottom:1px solid #d5dce3}' +
+  'td{padding:4px 8px;border-bottom:1px solid #eef1f4}' +
+  'input.f{border:1px solid #d5dce3;border-radius:3px;padding:5px 7px;' +
+          'font-family:ui-monospace,Consolas,monospace;font-size:12px;width:100%}' +
+  'input.qty,input.cop{width:72px}' +
+  'button{font:600 13px system-ui;padding:10px 16px;border-radius:4px;border:1px solid #d5dce3;' +
+         'background:#fff;cursor:pointer;margin-right:8px}' +
+  'button.go{background:#b26a00;color:#fff;border-color:#b26a00}' +
+  '.stage{padding:18px}.roll{display:inline-flex;flex-direction:column;background:#98a4b0}' +
+  '.roll .label{border-bottom:1px dashed #fff}' +
+  '.label{width:60mm;height:40mm;background:#fff;color:#000;padding:3mm 3.2mm;' +
+         'display:flex;flex-direction:column;justify-content:center;gap:.9mm;' +
+         'font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:4.1mm;' +
+         'line-height:1.15;overflow:hidden}' +
+  '.label div{white-space:nowrap;overflow:hidden}' +
+  '@page{size:60mm 40mm;margin:0}' +
+  '@media print{body{background:#fff}.bar{display:none!important}.stage{padding:0}' +
+    '.roll{display:block;background:none}.roll .label{border-bottom:none}' +
+    '.label{break-after:page;page-break-after:always;' +
+           '-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    '.label:last-child{break-after:auto;page-break-after:auto}}' +
+  '</style></head><body>' +
+  '<div class="bar"><h1>Labels &nbsp;60 × 40 mm &nbsp;·&nbsp; ' + escapeHtml(dateStr) + '</h1>' +
+    '<table><thead><tr><th>Customer PO</th><th>PR No</th><th>Item code</th>' +
+    '<th>Qty</th><th>Copies</th></tr></thead><tbody>' + editRows + '</tbody></table>' +
+    '<div style="margin-top:12px"><button class="go" id="pr">Print labels</button>' +
+    '<button id="rb">Rebuild preview</button>' +
+    '<span id="ct" style="font:12px ui-monospace,Consolas,monospace;color:#6b7885"></span></div></div>' +
+  '<div class="stage"><div class="roll" id="roll"></div></div>' +
+  '<' + 'script>' +
+  'var DATA=' + JSON.stringify(list) + ',DATE=' + JSON.stringify(dateStr) + ';' +
+  'function esc(s){return String(s).replace(/[&<>"]/g,function(c){' +
+    'return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]})}' +
+  'function grab(cls,key,num){document.querySelectorAll("."+cls).forEach(function(el){' +
+    'DATA[+el.dataset.i][key]=num?(parseFloat(el.value)||0):el.value})}' +
+  'function fitAll(){var MAX=4.1,MIN=2.2;' +
+    'document.querySelectorAll(".label div").forEach(function(el){' +
+      'el.style.fontSize=MAX+"mm";' +
+      'for(var p=0;p<3;p++){var avail=el.clientWidth,need=el.scrollWidth;' +
+        'if(!avail||need<=avail)break;' +
+        'var cur=parseFloat(el.style.fontSize);' +
+        'var next=Math.max(MIN,cur*(avail/need)*0.985);' +
+        'if(next>=cur)break;el.style.fontSize=next+"mm"}})}' +
+  'function build(){grab("po","po");grab("pr","pr");grab("item","item");grab("qty","qty",1);' +
+    'var h="",n=0;' +
+    'DATA.forEach(function(r,i){' +
+      'var c=parseInt(document.querySelector(\'.cop[data-i="\'+i+\'"]\').value)||0;' +
+      'for(var k=0;k<c;k++){n++;' +
+        'var L=[r.po,r.pr,r.item,"QTY:"+(Math.round(r.qty*1000)/1000)+"PCS","DATE:"+DATE];' +
+        'h+=\'<div class="label">\'+L.filter(function(x){return String(x==null?"":x).trim()!==""})' +
+        '.map(function(x){return \'<div>\'+esc(x)+\'</div>\'}).join("")+\'</div>\'}});' +
+    'document.getElementById("roll").innerHTML=h;fitAll();' +
+    'document.getElementById("ct").textContent=n+" label(s)"}' +
+  'document.getElementById("rb").onclick=build;' +
+  'document.getElementById("pr").onclick=function(){build();setTimeout(function(){window.print()},80)};' +
+  'document.addEventListener("input",build);build();' +
+  '<' + '/script></body></html>';
+}
+
 
 // ── EXCEL GENERATION — one sheet per PO, formatted ───────────────────────────
 function generateInvoiceXLSX() {
