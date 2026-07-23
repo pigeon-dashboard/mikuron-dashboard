@@ -3743,18 +3743,18 @@ function openLabelWindow(rows) {
 
   var win = window.open('', '_blank', 'width=980,height=820');
   if (!win) { alert('Please allow pop-ups for this site to print labels.'); return; }
-  win.document.write(buildLabelWindowHTML(list, dateStr));
+  win.document.write(buildLabelWindowHTML(list, dateStr, iso));
   win.document.close();
 
   // hand the data over, then inject the controller (avoids string-escaping hell)
-  win.__LBL = { list: list, date: dateStr };
+  win.__LBL = { list: list, date: dateStr, iso: iso };
   var s = win.document.createElement('script');
   s.textContent = '(' + labelWindowScript.toString() + ')();';
   win.document.body.appendChild(s);
 }
 
 // ── the popup's markup + CSS (no inline script) ──────────────────────────────
-function buildLabelWindowHTML(list, dateStr) {
+function buildLabelWindowHTML(list, dateStr, iso) {
   var editRows = list.map(function (r, i) {
     return '<tr>' +
       '<td><input class="f" data-k="po"   data-i="' + i + '" value="' + escapeHtml(r.po)   + '"></td>' +
@@ -3809,7 +3809,7 @@ function buildLabelWindowHTML(list, dateStr) {
     '.sheet:last-child{break-after:auto;page-break-after:auto}' +
     '.label,.cell{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
   '</style></head><body class="a4">' +
-  '<div class="bar"><h1>Labels &nbsp;·&nbsp; ' + escapeHtml(dateStr) + '</h1>' +
+  '<div class="bar"><h1>Labels &nbsp;·&nbsp; <span id="hdate">' + escapeHtml(dateStr) + '</span></h1>' +
     '<div class="opts">' +
       '<div class="opt"><label>Output</label><select id="mode">' +
         '<option value="a4">A4 — 50 × 30 mm, 36 per sheet</option>' +
@@ -3820,6 +3820,8 @@ function buildLabelWindowHTML(list, dateStr) {
         '<option value="drawing">Drawing No</option>' +
         '<option value="item">Item code</option>' +
       '</select></div>' +
+      '<div class="opt"><label>Label date</label>' +
+        '<input id="dt" type="date" value="' + escapeHtml(iso) + '" style="width:140px"></div>' +
       '<div class="opt"><label>Font pt</label><input id="fs" type="number" step="0.5" min="5" value="13"></div>' +
       '<div class="opt sheetonly"><label>Skip first</label><input id="skip" type="number" min="0" value="0"></div>' +
       '<div class="opt sheetonly"><label>Nudge X mm</label><input id="ox" type="number" step="0.5" value="0"></div>' +
@@ -3837,6 +3839,19 @@ function buildLabelWindowHTML(list, dateStr) {
 // ── the popup's controller; stringified and injected into the child window ───
 function labelWindowScript() {
   var D = window.__LBL, DATA = D.list, DATE = D.date;
+
+  // Label date is editable — lets you pre-print tomorrow's labels today.
+  function refreshDate() {
+    var v = $('dt').value;
+    if (v) {
+      var d = new Date(v + 'T00:00:00');
+      if (!isNaN(d.getTime())) {
+        var p2 = function (n) { return ('0' + n).slice(-2); };
+        DATE = p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + '/' + String(d.getFullYear()).slice(-2);
+      }
+    }
+    var h = $('hdate'); if (h) h.textContent = DATE;
+  }
 
   // sheet geometry, all mm.  sw/sh = sheet, w/h = cell, mt/ml/mr = margins,
   // cg/rg = column & row gaps.
@@ -3919,6 +3934,7 @@ function labelWindowScript() {
 
   function build() {
     readTable();
+    refreshDate();
     var mode = $('mode').value, M = MODES[mode];
     var base = Math.max(5, num($('fs').value) || 13);
     document.body.className = mode;
