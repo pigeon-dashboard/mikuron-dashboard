@@ -3604,10 +3604,11 @@ function generateInvoicePDF() {
     dataArr.forEach(function(d) {
       d.items.forEach(function(it) {
         window.__lastLabelRows.push({
-          po:   d.po_ref || '',
-          pr:   it.prNo  || d.pr_ref || '',
-          item: it.item  || '',
-          qty:  it.qty
+          po:      d.po_ref || '',
+          pr:      it.prNo  || d.pr_ref || '',
+          item:    it.item  || '',
+          drawing: it.drawingNo || '',
+          qty:     it.qty
         });
       });
     });
@@ -3671,9 +3672,17 @@ function generateInvoicePDF() {
   }
 }
 
+
+
 // ═══════════════════════════════════════════════════════════════════════════
-// 60×40mm ROLL LABELS — Customer PO / PR No / Item / Qty / Date
-// Prints in a separate window so this page's A4 @page rules are untouched.
+// LABELS — three output modes, printed in a separate window so this page's
+// A4 invoice @page rules are never affected.
+//   roll : 60 × 40 mm, one per page (thermal roll)
+//   a4   : A4 210×297, cells 50×30 mm, 4 × 9 = 36 per sheet
+//   s200 : sheet 200×158 mm, cells 47×35 mm, 4 × 4 = 16 per sheet
+// Content: Customer PO / PR No / Part no / QTY:nPCS / DATE:DD/MM/YY
+// Blank fields are skipped. One label per PO LINE — the same part on separate
+// lines stays separate, so split packing prints separate labels.
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Build label rows from the CURRENT Tab-3 selection.
@@ -3691,10 +3700,11 @@ function buildLabelRowsFromSelection() {
         var remain = Math.max(0, ordQty - delvd);
         var qty    = invDeliveryQtys[itemKey] !== undefined ? invDeliveryQtys[itemKey] : remain;
         if (qty > 0) rows.push({
-          po:   rowVal(r, 'Customer PO No') || '',
-          pr:   rowVal(r, 'PR No') || '',
-          item: rowVal(r, 'Item') || '',
-          qty:  qty
+          po:      rowVal(r, 'Customer PO No') || '',
+          pr:      rowVal(r, 'PR No') || '',
+          item:    rowVal(r, 'Item') || '',
+          drawing: rowVal(r, 'Drawing No') || '',
+          qty:     qty
         });
       });
     });
@@ -3715,10 +3725,13 @@ function printInvoiceLabels() {
 }
 
 function openLabelWindow(rows) {
-  // ONE LABEL PER LINE — the same part no on separate PO lines stays separate,
-  // so split packing (e.g. 600 + 732 of 510702) prints two labels, not one.
+  // Drawing No is the real part number on Sys-Mac POs (Item there is a process
+  // code like SC-SUB-MCH). Trim trailing revision text after a comma.
+  var clean = function (s) { return String(s || '').split(',')[0].trim(); };
   var list = rows.map(function (r) {
-    return { po: r.po, pr: r.pr, item: r.item, qty: r.qty };
+    var dw = clean(r.drawing);
+    return { po: r.po, pr: r.pr, item: r.item, drawing: dw,
+             part: dw || r.item, qty: r.qty };
   });
 
   // DD/MM/YY from the invoice date field
@@ -3728,89 +3741,244 @@ function openLabelWindow(rows) {
   var p2  = function (n) { return ('0' + n).slice(-2); };
   var dateStr = p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + '/' + String(d.getFullYear()).slice(-2);
 
-  var win = window.open('', '_blank', 'width=820,height=760');
+  var win = window.open('', '_blank', 'width=980,height=820');
   if (!win) { alert('Please allow pop-ups for this site to print labels.'); return; }
   win.document.write(buildLabelWindowHTML(list, dateStr));
   win.document.close();
+
+  // hand the data over, then inject the controller (avoids string-escaping hell)
+  win.__LBL = { list: list, date: dateStr };
+  var s = win.document.createElement('script');
+  s.textContent = '(' + labelWindowScript.toString() + ')();';
+  win.document.body.appendChild(s);
 }
 
+// ── the popup's markup + CSS (no inline script) ──────────────────────────────
 function buildLabelWindowHTML(list, dateStr) {
   var editRows = list.map(function (r, i) {
     return '<tr>' +
-      '<td><input class="f po"   data-i="' + i + '" value="' + escapeHtml(r.po)   + '"></td>' +
-      '<td><input class="f pr"   data-i="' + i + '" value="' + escapeHtml(r.pr)   + '"></td>' +
-      '<td><input class="f item" data-i="' + i + '" value="' + escapeHtml(r.item) + '"></td>' +
-      '<td><input class="f qty"  data-i="' + i + '" type="number" step="any" value="' + r.qty + '"></td>' +
-      '<td><input class="f cop"  data-i="' + i + '" type="number" min="0" max="99" value="1"></td>' +
+      '<td><input class="f" data-k="po"   data-i="' + i + '" value="' + escapeHtml(r.po)   + '"></td>' +
+      '<td><input class="f" data-k="pr"   data-i="' + i + '" value="' + escapeHtml(r.pr)   + '"></td>' +
+      '<td><input class="f" data-k="part" data-i="' + i + '" value="' + escapeHtml(r.part) + '"></td>' +
+      '<td><input class="f qty" data-k="qty" data-i="' + i + '" type="number" step="any" value="' + r.qty + '"></td>' +
+      '<td><input class="cop" data-i="' + i + '" type="number" min="0" max="99" value="1"></td>' +
     '</tr>';
   }).join('');
 
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Labels 60x40</title><style>' +
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Labels</title>' +
+  '<style id="pagecss"></style><style id="gridcss"></style><style>' +
   '*{box-sizing:border-box}' +
   'body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;color:#12161b;background:#eef1f4}' +
   '.bar{position:sticky;top:0;background:#fff;border-bottom:1px solid #d5dce3;padding:14px 18px;z-index:5}' +
   '.bar h1{margin:0 0 10px;font-size:13px;letter-spacing:.14em;text-transform:uppercase}' +
+  '.opts{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px}' +
+  '.opt{display:flex;flex-direction:column;gap:4px}' +
+  '.opt label{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#6b7885}' +
+  'select,.opt input{border:1px solid #d5dce3;border-radius:3px;padding:6px 8px;font-size:12.5px}' +
+  '.opt input{width:78px;font-family:ui-monospace,Consolas,monospace}' +
   'table{border-collapse:collapse;width:100%;font-size:12.5px;background:#fff}' +
   'th{text-align:left;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#6b7885;' +
      'padding:6px 8px;border-bottom:1px solid #d5dce3}' +
   'td{padding:4px 8px;border-bottom:1px solid #eef1f4}' +
-  'input.f{border:1px solid #d5dce3;border-radius:3px;padding:5px 7px;' +
-          'font-family:ui-monospace,Consolas,monospace;font-size:12px;width:100%}' +
+  'input.f,input.cop{border:1px solid #d5dce3;border-radius:3px;padding:5px 7px;' +
+    'font-family:ui-monospace,Consolas,monospace;font-size:12px;width:100%}' +
   'input.qty,input.cop{width:72px}' +
   'button{font:600 13px system-ui;padding:10px 16px;border-radius:4px;border:1px solid #d5dce3;' +
          'background:#fff;cursor:pointer;margin-right:8px}' +
   'button.go{background:#b26a00;color:#fff;border-color:#b26a00}' +
-  '.stage{padding:18px}.roll{display:inline-flex;flex-direction:column;background:#98a4b0}' +
-  '.roll .label{border-bottom:1px dashed #fff}' +
-  '.label{width:60mm;height:40mm;background:#fff;color:#000;padding:3mm 3.2mm;' +
-         'display:flex;flex-direction:column;justify-content:center;gap:.9mm;' +
-         'font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:4.1mm;' +
-         'line-height:1.15;overflow:hidden}' +
-  '.label div{white-space:nowrap;overflow:hidden}' +
-  '@page{size:60mm 40mm;margin:0}' +
-  '@media print{body{background:#fff}.bar{display:none!important}.stage{padding:0}' +
-    '.roll{display:block;background:none}.roll .label{border-bottom:none}' +
-    '.label{break-after:page;page-break-after:always;' +
-           '-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
-    '.label:last-child{break-after:auto;page-break-after:auto}}' +
-  '</style></head><body>' +
-  '<div class="bar"><h1>Labels &nbsp;60 × 40 mm &nbsp;·&nbsp; ' + escapeHtml(dateStr) + '</h1>' +
-    '<table><thead><tr><th>Customer PO</th><th>PR No</th><th>Item code</th>' +
+  '#stage{padding:18px}' +
+  /* ── shared label text: vertically centred, clipped not wrapped ── */
+  '.label,.cell{background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;font-weight:700;' +
+    'display:flex;flex-direction:column;justify-content:center;overflow:hidden;line-height:1.08}' +
+  '.label div,.cell div{white-space:nowrap;overflow:hidden}' +
+  /* ── roll 60x40 ── */
+  '.roll{display:inline-flex;flex-direction:column;background:#98a4b0}' +
+  '.roll .label{width:60mm;height:40mm;padding:2.6mm 3mm;gap:.7mm;border-bottom:1px dashed #fff}' +
+  /* ── sheet modes: dimensions injected per mode into #gridcss ── */
+  '.sheet{background:#fff;display:grid;align-content:start;' +
+    'margin:0 auto 16px;box-shadow:0 1px 6px rgba(0,0,0,.18)}' +
+  '.cell{padding:1.2mm 1.8mm 1.2mm 3.8mm}' +
+  '.cell.blank{background:transparent}' +
+  'body.a4 #stage,body.a4b #stage{background:#dde3e9}' +
+  /* ── print ── */
+  '@media print{body{background:#fff}.bar{display:none!important}#stage{padding:0;background:#fff}' +
+    'body.roll .roll{display:block;background:none}' +
+    'body.roll .roll .label{border-bottom:none;break-after:page;page-break-after:always}' +
+    'body.roll .roll .label:last-child{break-after:auto;page-break-after:auto}' +
+    '.sheet{margin:0;box-shadow:none;break-after:page;page-break-after:always}' +
+    '.sheet:last-child{break-after:auto;page-break-after:auto}' +
+    '.label,.cell{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
+  '</style></head><body class="a4">' +
+  '<div class="bar"><h1>Labels &nbsp;·&nbsp; ' + escapeHtml(dateStr) + '</h1>' +
+    '<div class="opts">' +
+      '<div class="opt"><label>Output</label><select id="mode">' +
+        '<option value="a4">A4 — 50 × 30 mm, 36 per sheet</option>' +
+        '<option value="a4b">A4 — 47 × 35 mm, 32 per sheet</option>' +
+        '<option value="roll">Roll 60 × 40 mm (thermal)</option>' +
+      '</select></div>' +
+      '<div class="opt"><label>Part no from</label><select id="src">' +
+        '<option value="drawing">Drawing No</option>' +
+        '<option value="item">Item code</option>' +
+      '</select></div>' +
+      '<div class="opt"><label>Font pt</label><input id="fs" type="number" step="0.5" min="5" value="13"></div>' +
+      '<div class="opt sheetonly"><label>Skip first</label><input id="skip" type="number" min="0" value="0"></div>' +
+      '<div class="opt sheetonly"><label>Nudge X mm</label><input id="ox" type="number" step="0.5" value="0"></div>' +
+      '<div class="opt sheetonly"><label>Nudge Y mm</label><input id="oy" type="number" step="0.5" value="0"></div>' +
+      '<div class="opt sheetonly"><label>Indent col 3-4</label><input id="ind" type="number" step="0.5" value="0"></div>' +
+    '</div>' +
+    '<table><thead><tr><th>Customer PO</th><th>PR No</th><th>Part no</th>' +
     '<th>Qty</th><th>Copies</th></tr></thead><tbody>' + editRows + '</tbody></table>' +
     '<div style="margin-top:12px"><button class="go" id="pr">Print labels</button>' +
     '<button id="rb">Rebuild preview</button>' +
     '<span id="ct" style="font:12px ui-monospace,Consolas,monospace;color:#6b7885"></span></div></div>' +
-  '<div class="stage"><div class="roll" id="roll"></div></div>' +
-  '<' + 'script>' +
-  'var DATA=' + JSON.stringify(list) + ',DATE=' + JSON.stringify(dateStr) + ';' +
-  'function esc(s){return String(s).replace(/[&<>"]/g,function(c){' +
-    'return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]})}' +
-  'function grab(cls,key,num){document.querySelectorAll("."+cls).forEach(function(el){' +
-    'DATA[+el.dataset.i][key]=num?(parseFloat(el.value)||0):el.value})}' +
-  'function fitAll(){var MAX=4.1,MIN=2.2;' +
-    'document.querySelectorAll(".label div").forEach(function(el){' +
-      'el.style.fontSize=MAX+"mm";' +
-      'for(var p=0;p<3;p++){var avail=el.clientWidth,need=el.scrollWidth;' +
-        'if(!avail||need<=avail)break;' +
-        'var cur=parseFloat(el.style.fontSize);' +
-        'var next=Math.max(MIN,cur*(avail/need)*0.985);' +
-        'if(next>=cur)break;el.style.fontSize=next+"mm"}})}' +
-  'function build(){grab("po","po");grab("pr","pr");grab("item","item");grab("qty","qty",1);' +
-    'var h="",n=0;' +
-    'DATA.forEach(function(r,i){' +
-      'var c=parseInt(document.querySelector(\'.cop[data-i="\'+i+\'"]\').value)||0;' +
-      'for(var k=0;k<c;k++){n++;' +
-        'var L=[r.po,r.pr,r.item,"QTY:"+(Math.round(r.qty*1000)/1000)+"PCS","DATE:"+DATE];' +
-        'h+=\'<div class="label">\'+L.filter(function(x){return String(x==null?"":x).trim()!==""})' +
-        '.map(function(x){return \'<div>\'+esc(x)+\'</div>\'}).join("")+\'</div>\'}});' +
-    'document.getElementById("roll").innerHTML=h;fitAll();' +
-    'document.getElementById("ct").textContent=n+" label(s)"}' +
-  'document.getElementById("rb").onclick=build;' +
-  'document.getElementById("pr").onclick=function(){build();setTimeout(function(){window.print()},80)};' +
-  'document.addEventListener("input",build);build();' +
-  '<' + '/script></body></html>';
+  '<div id="stage"></div></body></html>';
 }
 
+// ── the popup's controller; stringified and injected into the child window ───
+function labelWindowScript() {
+  var D = window.__LBL, DATA = D.list, DATE = D.date;
+
+  // sheet geometry, all mm.  sw/sh = sheet, w/h = cell, mt/ml/mr = margins,
+  // cg/rg = column & row gaps.
+  var MODES = {
+    roll: { page: '60mm 40mm' },
+    a4:   { page: 'A4', sw: 210, sh: 297, cols: 4, rows: 9,
+            w: 50, h: 30, mt: 5, ml: 3, mr: 4, cg: 1, rg: 2 },
+    a4b:  { page: 'A4', sw: 210, sh: 297, cols: 4, rows: 8,
+            w: 47, h: 35, mt: 3, ml: 8, mr: 9, cg: 3, rg: 1.8 }
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function num(v) { return parseFloat(v) || 0; }
+
+  function readTable() {
+    document.querySelectorAll('.f').forEach(function (el) {
+      var i = +el.dataset.i, k = el.dataset.k;
+      DATA[i][k] = (k === 'qty') ? num(el.value) : el.value;
+    });
+  }
+  function copiesFor(i) {
+    var el = document.querySelector('.cop[data-i="' + i + '"]');
+    return el ? (parseInt(el.value) || 0) : 0;
+  }
+  function labelInner(r) {
+    return [r.po, r.pr, r.part,
+            'QTY:' + (Math.round(r.qty * 1000) / 1000) + 'PCS',
+            'DATE:' + DATE]
+      .filter(function (x) { return String(x == null ? '' : x).trim() !== ''; })
+      .map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('');
+  }
+
+  // switching the source refills the Part no inputs from the chosen field
+  function applySource() {
+    var src = $('src').value;
+    document.querySelectorAll('.f[data-k="part"]').forEach(function (el) {
+      var i = +el.dataset.i;
+      var v = (src === 'item') ? DATA[i].item : (DATA[i].drawing || DATA[i].item);
+      el.value = v; DATA[i].part = v;
+    });
+  }
+
+  // Start every line at the chosen pt; shrink a line only if too WIDE, then
+  // shrink the whole label only if the stack is too TALL for its cell.
+  function fit(base) {
+    var MIN = 5;
+    document.querySelectorAll('.label, .cell').forEach(function (box) {
+      var kids = box.querySelectorAll('div');
+      if (!kids.length) return;
+      kids.forEach(function (el) { el.style.fontSize = base + 'pt'; });
+
+      kids.forEach(function (el) {                       // width pass, per line
+        for (var p = 0; p < 4; p++) {
+          var avail = el.clientWidth, need = el.scrollWidth;
+          if (!avail || need <= avail) break;
+          var cur = parseFloat(el.style.fontSize);
+          var next = Math.max(MIN, cur * (avail / need) * 0.98);
+          if (next >= cur) break;
+          el.style.fontSize = next + 'pt';
+        }
+      });
+
+      for (var q = 0; q < 10; q++) {                     // height pass, whole label
+        if (box.scrollHeight <= box.clientHeight) break;
+        var changed = false;
+        kids.forEach(function (el) {
+          var cur = parseFloat(el.style.fontSize);
+          var next = Math.max(MIN, cur * 0.94);
+          if (next < cur) { el.style.fontSize = next + 'pt'; changed = true; }
+        });
+        if (!changed) break;
+      }
+    });
+  }
+
+  function build() {
+    readTable();
+    var mode = $('mode').value, M = MODES[mode];
+    var base = Math.max(5, num($('fs').value) || 13);
+    document.body.className = mode;
+    document.querySelectorAll('.sheetonly').forEach(function (el) {
+      el.style.display = (mode === 'roll') ? 'none' : 'flex';
+    });
+
+    var items = [];
+    DATA.forEach(function (r, i) {
+      var c = copiesFor(i);
+      for (var k = 0; k < c; k++) items.push(r);
+    });
+
+    setPage('@page{size:' + M.page + ';margin:0}');
+    var out = '', note = items.length + ' label(s)';
+
+    if (mode === 'roll') {
+      $('gridcss').textContent = '';
+      out = '<div class="roll">' + items.map(function (r) {
+        return '<div class="label">' + labelInner(r) + '</div>';
+      }).join('') + '</div>';
+    } else {
+      var per  = M.cols * M.rows;
+      var skip = Math.max(0, parseInt($('skip').value) || 0);
+      var ox = num($('ox').value), oy = num($('oy').value), ind = num($('ind').value);
+
+      $('gridcss').textContent =
+        '.sheet{width:' + M.sw + 'mm;height:' + M.sh + 'mm;' +
+          'grid-template-columns:repeat(' + M.cols + ',' + M.w + 'mm);' +
+          'grid-auto-rows:' + M.h + 'mm;column-gap:' + M.cg + 'mm;row-gap:' + M.rg + 'mm}' +
+        '.cell{width:' + M.w + 'mm;height:' + M.h + 'mm}' +
+        (ind ? '.cell:nth-child(' + M.cols + 'n+3),.cell:nth-child(' + M.cols + 'n+4)' +
+               '{padding-left:' + (3.8 + ind) + 'mm}' : '');
+
+      var cells = [];
+      for (var s = 0; s < skip; s++) cells.push('<div class="cell blank"></div>');
+      items.forEach(function (r) { cells.push('<div class="cell">' + labelInner(r) + '</div>'); });
+      while (cells.length % per !== 0) cells.push('<div class="cell blank"></div>');
+      for (var p = 0; p < cells.length; p += per) {
+        out += '<div class="sheet" style="padding:' + (M.mt + oy) + 'mm ' + M.mr +
+               'mm 0 ' + (M.ml + ox) + 'mm">' + cells.slice(p, p + per).join('') + '</div>';
+      }
+      note += ' · ' + (cells.length / per) + ' sheet(s)';
+      if (skip) note += ' · skipping ' + skip;
+    }
+
+    $('stage').innerHTML = out;
+    fit(base);
+    $('ct').textContent = note;
+  }
+
+  function setPage(rule) { $('pagecss').textContent = rule; }
+
+  $('src').addEventListener('change', function () { applySource(); build(); });
+  $('rb').onclick = build;
+  $('pr').onclick = function () { build(); setTimeout(function () { window.print(); }, 90); };
+  document.addEventListener('input', build);
+  document.addEventListener('change', build);
+  build();
+}
 
 // ── EXCEL GENERATION — one sheet per PO, formatted ───────────────────────────
 function generateInvoiceXLSX() {
