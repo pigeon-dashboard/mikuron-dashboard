@@ -5841,7 +5841,7 @@ async function markVendorInvoicesPaid(pvDataArr) {
         invoiceKeys: d.invoices.map(function(inv) { return invKey_(d.payeeName, inv.invoiceNo); })
       };
     }))
-  }, 15000);
+  }, 60000);
   if (!json || json.status !== 'ok') {
     throw new Error((json && json.message) || 'Backend returned an error with no message');
   }
