@@ -6348,6 +6348,15 @@ function ddmmyyyyToSortableISO_(s) {
   return m ? (m[3] + '-' + m[2] + '-' + m[1]) : '0000-00-00';
 }
 
+// A credit note reduces what we owe. Detected by invoice-no prefix "CN"
+// (e.g. CN2604-03) OR a negative stored total.
+function isCreditNote_(r) {
+  var no = String(r.invoiceNo || '').trim().toUpperCase();
+  return /^CN/.test(no) || (Number(r.total) < 0);
+}
+// Absolute magnitude of a credit note, as a positive number.
+function cnMagnitude_(r) { return Math.abs(Number(r.total) || 0); }
+
 function buildVendorSoaLedger(vendorName, yearFilter) {
   const normVendor = vendorName.trim().toLowerCase();
 
@@ -6356,20 +6365,30 @@ function buildVendorSoaLedger(vendorName, yearFilter) {
     .filter(function(r) { return r.vendorName.trim().toLowerCase() === normVendor; })
     .filter(function(r) { return !yearFilter || ddmmyyyyToSortableISO_(r.invoiceDate).slice(0,4) === yearFilter; })
     .map(function(r) {
+      var isCN = isCreditNote_(r);
       return {
         sortKey: ddmmyyyyToSortableISO_(r.invoiceDate),
         date: r.invoiceDate,
-        type: 'Invoice',
+        type: isCN ? 'Credit Note' : 'Invoice',
         reference: r.invoiceNo,
-        debit: r.total || 0,
-        credit: 0,
+        debit:  isCN ? 0 : (Number(r.total) || 0),
+        credit: isCN ? cnMagnitude_(r) : 0,   // CN lands in Credit, reducing balance
         billingEntity: resolveBillingEntity(r.billToName)
       };
     });
 
-  // Credit entries — one per ACTIVE payment voucher covering this vendor (Tab 9)
+  // Credit entries — one per ACTIVE payment voucher covering this vendor (Tab 9).
+  // Dedupe by pvRef first: if the backend ever returns the same PV more than
+  // once (one row per covered invoice), a statement must still show it ONCE.
+  const seenPv = {};
   const payEntries = vendorPaymentHistory
     .filter(function(r) { return r.vendorName.trim().toLowerCase() === normVendor && r.status !== 'Cancelled'; })
+    .filter(function(r) {
+      var key = String(r.pvRef || '') + '|' + String(r.totalAmount || '') + '|' + String(r.date || '');
+      if (seenPv[key]) return false;
+      seenPv[key] = true;
+      return true;
+    })
     .filter(function(r) {
       if (!yearFilter) return true;
       const m = (r.date || '').match(/^(\d{4})-/) || (r.date || '').match(/\d{2}\/\d{2}\/(\d{4})/);
