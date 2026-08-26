@@ -2541,7 +2541,29 @@ function getInternalProductCode(customerName, itemRef) {
   return entry.itemCodes[itemKey];
 }
 
-function convertSelectedToSubcon() {
+// ── INVENTORY MASTER PRICE (Customer + Drawing No + Item → Unit Price MYR) ──
+// Cached client-side; refreshed at the start of convertSelectedToSubcon() so
+// each conversion uses the latest master list. A match overrides the SGD×
+// forex×margin calculation below; no match falls back to that calculation.
+window.__invMasterPriceMap = {};
+
+function invMasterKey(customer, drawing, item) {
+  return [customer, drawing, item].map(function(v) { return String(v == null ? '' : v).trim().toLowerCase(); }).join('|||');
+}
+
+async function loadInventoryMasterPrice() {
+  try {
+    if (typeof jsonpCall !== 'function' || typeof WEBAPP_URL === 'undefined' || !WEBAPP_URL) return;
+    const json = await jsonpCall({ action: 'get_inventory_master_price' }, 15000);
+    if (json && json.status === 'ok' && json.records) {
+      const map = {};
+      json.records.forEach(function(r) { map[invMasterKey(r.customer, r.drawingNo, r.item)] = r; });
+      window.__invMasterPriceMap = map;
+    }
+  } catch (e) { console.warn('loadInventoryMasterPrice failed:', e.message); }
+}
+
+async function convertSelectedToSubcon() {
   const groupsMap = window.__currentGroupsMap;
   if (!groupsMap) return;
 
@@ -2550,6 +2572,8 @@ function convertSelectedToSubcon() {
     alert('No SGD→MYR rate available. Please wait for the live rate to load, or enter a manual override rate before converting.');
     return;
   }
+
+  await loadInventoryMasterPrice(); // best-effort refresh; keeps prior cache on failure
 
   const marginPct = parseFloat(document.getElementById('marginPct').value) || 0;
   const marginFactor = 1 - (marginPct / 100);
@@ -2564,10 +2588,14 @@ function convertSelectedToSubcon() {
       const groupEntry = getCustomerGroupCode(custName);
       const itemRef = r['Item'] || r['Drawing No'] || r['Description'];
       const internalCode = getInternalProductCode(custName, itemRef);
+      const drawingNo = r['Drawing No'] || '';
 
       const unitPriceSGD = parseFloat(r['Unit Price']) || 0;
-      const unitCostMYR = unitPriceSGD * rate * marginFactor;
       const qty = parseFloat(r['Qty']) || 0;
+
+      const masterHit = window.__invMasterPriceMap[invMasterKey(custName, drawingNo, itemRef)];
+      const priceSource = (masterHit && masterHit.price) ? 'master' : 'calculated';
+      const unitCostMYR = priceSource === 'master' ? Number(masterHit.price) : (unitPriceSGD * rate * marginFactor);
       const totalMYR = unitCostMYR * qty;
 
       subconData.push({
@@ -2577,7 +2605,7 @@ function convertSelectedToSubcon() {
         customerName: custName,
         item: r['Item'] || '',
         description: r['Description'] || '',
-        drawingNo: r['Drawing No'] || '',
+        drawingNo: drawingNo,
         revNo: r['Rev No'] || '',
         lotNo: r['Lot No'] || '',
         qty: qty,
@@ -2586,6 +2614,7 @@ function convertSelectedToSubcon() {
         marginPct: marginPct,
         unitCostMYR: unitCostMYR,
         totalMYR: totalMYR,
+        priceSource: priceSource,
         requestedDelivery: r['Requested Delivery'] || '',
         status: 'Sub-Contract - Pending'
       });
@@ -2837,8 +2866,8 @@ async function loadSubconInvoiceLines() {
     }
     window.__subconInvoiceLines = json.lines.map(function(it) {
       return {
-        internalCode: it.internalCode || '', item: it.item || '', drawingNo: it.drawingNo || '',
-        lotNo: it.lotNo || '', description: it.description || '',
+        internalCode: it.internalCode || '', originalPONo: it.originalPONo || '', item: it.item || '', drawingNo: it.drawingNo || '',
+        lotNo: it.lotNo || '', description: it.description || '', revNo: it.revNo || '',
         originalQty: Number(it.qty) || 0, qty: Number(it.qty) || 0,
         unitCostMYR: Number(it.unitCostMYR) || 0, totalMYR: Number(it.totalMYR) || 0,
         requestedDelivery: it.requestedDelivery || ''
@@ -2858,6 +2887,7 @@ function renderSubconInvoiceLinesTable() {
   const rows = lines.map(function(it, i) {
     return '<tr>' +
       '<td style="padding:6px 9px;">' + escapeHtml(it.internalCode || '—') + '</td>' +
+      '<td style="padding:6px 9px;">' + escapeHtml(it.originalPONo || '—') + '</td>' +
       '<td style="padding:6px 9px;">' + escapeHtml(it.description || it.item || '—') + '</td>' +
       '<td style="padding:6px 9px;text-align:right;color:var(--muted);">' + it.originalQty.toLocaleString() + '</td>' +
       '<td style="padding:6px 9px;text-align:right;"><input type="number" min="0" step="any" value="' + it.qty +
@@ -2870,12 +2900,12 @@ function renderSubconInvoiceLinesTable() {
   host.innerHTML =
     '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
       '<thead><tr style="background:#f8fafc;text-align:left;">' +
-        '<th style="padding:6px 9px;">Internal Code</th><th style="padding:6px 9px;">Description</th>' +
+        '<th style="padding:6px 9px;">Internal Code</th><th style="padding:6px 9px;">Customer PO No</th><th style="padding:6px 9px;">Description</th>' +
         '<th style="padding:6px 9px;text-align:right;">PO Qty</th><th style="padding:6px 9px;text-align:right;">Invoice Qty</th>' +
         '<th style="padding:6px 9px;text-align:right;">Unit Price</th><th style="padding:6px 9px;text-align:right;">Amount</th>' +
       '</tr></thead><tbody>' + rows + '</tbody>' +
       '<tfoot><tr style="border-top:1px solid var(--border);font-weight:700;">' +
-        '<td colspan="5" style="padding:6px 9px;text-align:right;">Total:</td>' +
+        '<td colspan="6" style="padding:6px 9px;text-align:right;">Total:</td>' +
         '<td id="subconInvLineGrandTotal" style="padding:6px 9px;text-align:right;white-space:nowrap;">RM ' +
           lines.reduce(function(s, it) { return s + it.totalMYR; }, 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) +
         '</td>' +
@@ -2901,8 +2931,8 @@ function getSubconInvoiceItems() {
   const lines = window.__subconInvoiceLines;
   if (!lines || !lines.length) return null;
   const out = lines.filter(function(it) { return it.qty > 0; }).map(function(it) {
-    return { internalCode: it.internalCode, item: it.item, drawingNo: it.drawingNo, lotNo: it.lotNo,
-             description: it.description, qty: it.qty, unitCostMYR: it.unitCostMYR, totalMYR: it.totalMYR,
+    return { internalCode: it.internalCode, originalPONo: it.originalPONo, item: it.item, drawingNo: it.drawingNo, lotNo: it.lotNo,
+             revNo: it.revNo, description: it.description, qty: it.qty, unitCostMYR: it.unitCostMYR, totalMYR: it.totalMYR,
              requestedDelivery: it.requestedDelivery };
   });
   return out.length ? out : null;
@@ -2949,14 +2979,15 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
 
   const rowsHtml = items.map(function(r) {
     return `<tr>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(r.internalCode || '—')}</td>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(r.description || r.item || '—')}</td>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(r.drawingNo || '—')}</td>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(r.lotNo || '—')}</td>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">${r.qty.toLocaleString()}</td>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.unitCostMYR.toFixed(2)}</td>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;white-space:nowrap;">${escapeHtml(r.requestedDelivery || '—')}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;white-space:nowrap;">${escapeHtml(r.internalCode || '—')}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;white-space:nowrap;">${escapeHtml(r.originalPONo || '—')}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;">${escapeHtml(r.description || r.item || '—')}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;">${escapeHtml(r.drawingNo || '—')}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;">${escapeHtml(r.lotNo || '—')}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">${r.qty.toLocaleString()}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.unitCostMYR.toFixed(2)}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;white-space:nowrap;">${escapeHtml(r.requestedDelivery || '—')}</td>
     </tr>`;
   }).join('');
 
@@ -3000,6 +3031,7 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
     <thead>
       <tr>
         <th>Internal Code</th>
+        <th>Customer PO No</th>
         <th>Description</th>
         <th>Drawing No</th>
         <th>Lot No</th>
@@ -3012,7 +3044,7 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
     <tbody>${rowsHtml}</tbody>
     <tfoot>
       <tr style="font-weight:700;">
-        <td colspan="4" style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">Total:</td>
+        <td colspan="5" style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">Total:</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">${totalQty.toLocaleString()}</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;"></td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${totalAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
@@ -3029,6 +3061,79 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
       <div class="stamp-caption">Authorized By (${letterhead.shortName || letterhead.name.replace(/<[^>]*>/g,'')})</div>
     </div>
   </div>
+</div>`;
+}
+
+// ── WORK ORDER SUMMARY (extra page appended to the PO — production-floor view) ──
+// Groups the same PO's line items by Internal Code + Drawing No + Rev No,
+// summing quantity across any duplicates (e.g. the same part pulled in from
+// more than one Customer PO) into one consolidated production line, with the
+// contributing Customer PO No(s) listed for back-to-back traceability.
+function buildSubconWorkOrderSummaryPage(poNo, poDate, items) {
+  const groups = {};
+  const order = [];
+  items.forEach(function(r) {
+    const key = (r.internalCode || r.item || '—') + '|||' + (r.drawingNo || '') + '|||' + (r.revNo || '');
+    if (!groups[key]) {
+      groups[key] = {
+        internalCode: r.internalCode || '', description: r.description || r.item || '',
+        drawingNo: r.drawingNo || '', revNo: r.revNo || '', qty: 0, custPOs: {}
+      };
+      order.push(key);
+    }
+    groups[key].qty += Number(r.qty) || 0;
+    if (r.originalPONo) groups[key].custPOs[r.originalPONo] = true;
+  });
+
+  const rowsHtml = order.map(function(k) {
+    const g = groups[k];
+    const custPOList = Object.keys(g.custPOs).join(', ') || '—';
+    return `<tr>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;white-space:nowrap;">${escapeHtml(g.internalCode || '—')}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;">${escapeHtml(g.description || '—')}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;">${escapeHtml(g.drawingNo || '—')}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;">${escapeHtml(g.revNo || '—')}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">${g.qty.toLocaleString()}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;">${escapeHtml(custPOList)}</td>
+    </tr>`;
+  }).join('');
+  const totalQty = order.reduce(function(s, k) { return s + groups[k].qty; }, 0);
+  const letterhead = COMPANY_LETTERHEADS.mikuron;
+
+  return `<div class="page">
+  <div class="header">
+    <div class="header-logo"><img src="${LOGO_B64}" alt="Company Logo"></div>
+    <div class="company-info">
+      <div class="co-name">${letterhead.name}</div>
+      <div class="co-details">${letterhead.details}</div>
+    </div>
+    <div class="title-box"><h1>WORK ORDER SUMMARY</h1></div>
+  </div>
+
+  <div style="margin-bottom:12px;font-size:12px;">
+    <b>Ref PO:</b> MPT/SC-PO/${escapeHtml(poNo)} &nbsp;|&nbsp; <b>Date:</b> ${escapeHtml(poDate)}
+  </div>
+
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th>Internal Code</th>
+        <th>Description</th>
+        <th>Drawing No</th>
+        <th>Rev No</th>
+        <th>Total Qty</th>
+        <th>Customer PO(s)</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr style="font-weight:700;">
+        <td colspan="4" style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">Grand Total Qty:</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">${totalQty.toLocaleString()}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;"></td>
+      </tr>
+    </tfoot>
+  </table>
 </div>`;
 }
 
@@ -3058,7 +3163,12 @@ function generateSubcontractPOPDF() {
     if (items.length === 0) { alert('Nothing to generate.'); return; }
 
     const poNo = assignSubconPoNo();
-    const pageHtml = buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorAddress, vendorAttn, remarks, items, templateType, poRef);
+    let pageHtml = buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorAddress, vendorAttn, remarks, items, templateType, poRef);
+    // Work Order Summary is a production-floor aid for the PO itself, not the
+    // Invoice — append it as a second page in the same PDF/print.
+    if (templateType !== 'mptmfg_invoice') {
+      pageHtml += buildSubconWorkOrderSummaryPage(poNo, poDate, items);
+    }
     const docLabel = templateType === 'mptmfg_invoice' ? formatSubconInvoiceNo(poNo, poDate) : ('MPT-SC-PO-' + poNo);
     const combinedHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>${templateType === 'mptmfg_invoice' ? 'Invoice' : 'Subcontract PO'} ${docLabel} — ${new Date().toLocaleDateString('en-GB')}</title>
@@ -9794,8 +9904,8 @@ function exportSOAPDF() {
     form.append('total', String(total));
     form.append('status','Active');
     form.append('linesJson', JSON.stringify(items.map(function(it){
-      return { internalCode:it.internalCode||'', item:it.item||'', drawingNo:it.drawingNo||'',
-               lotNo:it.lotNo||'', description:it.description||'', qty:Number(it.qty)||0,
+      return { internalCode:it.internalCode||'', originalPONo:it.originalPONo||'', item:it.item||'', drawingNo:it.drawingNo||'',
+               lotNo:it.lotNo||'', revNo:it.revNo||'', description:it.description||'', qty:Number(it.qty)||0,
                unitCostMYR:Number(it.unitCostMYR)||0, totalMYR:Number(it.totalMYR)||0,
                requestedDelivery:it.requestedDelivery||'' };
     })));
@@ -9979,6 +10089,9 @@ function exportSOAPDF() {
         if (typeof buildSubcontractPOPage === 'function' && items.length){
           pageHtml = buildSubcontractPOPage(meta.poNo, meta.poDate, meta.deliveryTerms,
             meta.vendorName, meta.vendorAddress, meta.vendorAttn, meta.remarks, items, meta.templateType, meta.poRef);
+          if (meta.templateType !== 'mptmfg_invoice' && typeof buildSubconWorkOrderSummaryPage === 'function'){
+            pageHtml += buildSubconWorkOrderSummaryPage(meta.poNo, meta.poDate, items);
+          }
         }
       } catch(e){ console.error('rebuild SC-PO page failed:', e); }
 
