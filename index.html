@@ -577,6 +577,23 @@
 
     <!-- PO generation config — appears once at least one group is selected for print -->
     <div id="subconPoConfig" class="inv-config" style="display:none; margin-bottom:16px;">
+      <div style="grid-column: span 2;">
+        <label>Print Layout</label>
+        <select id="subconPoTemplate" onchange="toggleSubconPoRefVisibility()">
+          <option value="mikuron_po">PO — Mikuron Precision Pte Ltd (with stamp &amp; signature)</option>
+          <option value="mptmfg_invoice">Invoice — MPT Manufacturing (M) Sdn Bhd</option>
+        </select>
+      </div>
+      <div id="subconPoRefWrap" style="display:none; grid-column: span 2;">
+        <label>PO Ref (links this Invoice back to the original Subcontract PO)</label>
+        <select id="subconPoRef" onchange="loadSubconInvoiceLines()">
+          <option value="">— No PO Ref —</option>
+        </select>
+      </div>
+      <div id="subconInvoiceLinesWrap" style="display:none; grid-column: span 2;">
+        <label>Invoice Line Items — reduce Qty to issue a partial Invoice against this PO</label>
+        <div id="subconInvoiceLinesHost" style="overflow-x:auto; border:1px solid var(--border); border-radius:8px;"></div>
+      </div>
       <div>
         <label>PO No (MPT/SC-PO/) — auto-increments each download</label>
         <div style="display:flex; gap:6px; align-items:center;">
@@ -592,17 +609,28 @@
         <label>Delivery Terms</label>
         <input type="text" id="subconPoDeliveryTerms" placeholder="e.g. 30 DAYS from PO date" value="">
       </div>
-      <div style="grid-column: span 2;">
-        <label>Subcontractor / Vendor Name</label>
-        <input type="text" id="subconVendorName" placeholder="Vendor company name this PO is issued to">
+      <div id="subconBillToNote" style="display:none; grid-column: span 2; font-size:13px; color:var(--muted); align-self:end; padding-bottom:8px;">
+        <b>Bill To (fixed):</b> Mikuron Precision Pte Ltd — 3007 Ubi Road 1, #04-438, Singapore 408701, Attn: Linda
       </div>
-      <div style="grid-column: span 2;">
-        <label>Subcontractor Address</label>
-        <input type="text" id="subconVendorAddress" placeholder="Vendor address">
-      </div>
-      <div>
-        <label>Attn</label>
-        <input type="text" id="subconVendorAttn" placeholder="Contact person">
+      <div id="subconVendorFieldsWrap" style="display:contents;">
+        <div style="grid-column: span 2;">
+          <label>Choose Vendor (or select "Manual Entry" to type a new one)</label>
+          <select id="subconVendorPicker" onchange="applySubconVendorPick()">
+            <option value="">— Manual Entry —</option>
+          </select>
+        </div>
+        <div style="grid-column: span 2;">
+          <label>Subcontractor / Vendor Name</label>
+          <input type="text" id="subconVendorName" placeholder="Vendor company name this PO is issued to" oninput="autoSuggestSubconPoRef()">
+        </div>
+        <div style="grid-column: span 2;">
+          <label>Subcontractor Address</label>
+          <input type="text" id="subconVendorAddress" placeholder="Vendor address">
+        </div>
+        <div>
+          <label>Attn</label>
+          <input type="text" id="subconVendorAttn" placeholder="Contact person">
+        </div>
       </div>
       <div>
         <label>Remarks</label>
@@ -1382,12 +1410,28 @@ const STAMP_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAD4CAYAAAC
 const COMPANY_LETTERHEADS = {
   mikuron: {
     name: 'Mikuron Precision <span>Pte Ltd</span>',
+    shortName: 'Mikuron Precision Pte Ltd',
     details: '48 Toh Guan Road East, #05-149,<br>Enterprise hub, Singapore 608586.<br>Tel : 65-9022 2093 &nbsp;|&nbsp; Email : dominick.han@mikuronpteltd.com<br>Co Reg / GST No. : 201408668Z'
   },
+
   mptmfg: {
     name: 'MPT MANUFACTURING <span>(M) SDN. BHD</span>',
-    details: 'No 30 Jalan Gemilang 9, Taman Perindustrian Cemerlang,<br>Ulu Tiram, 81800, Johor, Malaysia.<br>Tel : +6012 345 6789 &nbsp;|&nbsp; Email : enquiry@mikuronpteltd.com'
+    shortName: 'MPT Manufacturing (M) Sdn Bhd',
+    // Matches the actual company letterhead (reg no + address + tel) as printed
+    // on physical MPT Mfg invoices/PO paperwork.
+    details: '202201023753 (1469450-V)<br>No. 30, Jalan Gemilang 9, Taman Perindustrian Cemerlang,<br>81800 Ulu Tiram, Johor.<br>Tel : 60-07 861 6258'
   }
+};
+
+// Fixed "Bill To" block for the MPT Manufacturing "Invoice" subcontract layout —
+// MPT always invoices its sister company Mikuron Precision Pte Ltd here, so this
+// is intentionally NOT driven by the Vendor Name/Address/Attn fields (those are
+// only for the PO layout, where Mikuron issues a PO out to a real subcontractor).
+// Transcribed from the actual invoice paperwork sample provided.
+const MIKURON_BILL_TO = {
+  name: 'Mikuron Precision Pte Ltd',
+  address: '3007 Ubi Road 1, #04-438, Singapore 408701',
+  attn: 'Linda'
 };
 
 // Decides which letterhead entity an invoice/PO belongs to, based on the
@@ -2666,6 +2710,204 @@ function updateSubconPoConfigVisibility() {
   if (btn) btn.disabled = !hasSelection;
 }
 
+// ── PO REF (links an Invoice-template print back to an earlier Subcontract PO) ──
+// Only meaningful when the "Invoice — MPT Manufacturing" layout is selected.
+// This also toggles the Vendor fields: the Invoice layout always bills the
+// fixed Mikuron Precision Pte Ltd "Bill To" block (MIKURON_BILL_TO), so the
+// Vendor Name/Address/Attn inputs (only relevant for the PO layout, where
+// Mikuron issues a PO out to a real subcontractor) are hidden in that mode.
+function toggleSubconPoRefVisibility() {
+  const tpl = (document.getElementById('subconPoTemplate') || {}).value;
+  const isInvoice = tpl === 'mptmfg_invoice';
+  const wrap = document.getElementById('subconPoRefWrap');
+  if (wrap) wrap.style.display = isInvoice ? '' : 'none';
+  const vendorWrap = document.getElementById('subconVendorFieldsWrap');
+  if (vendorWrap) vendorWrap.style.display = isInvoice ? 'none' : 'contents';
+  const billToNote = document.getElementById('subconBillToNote');
+  if (billToNote) billToNote.style.display = isInvoice ? '' : 'none';
+  if (isInvoice) { refreshSubconPoRefOptions(); autoSuggestSubconPoRef(); loadSubconInvoiceLines(); }
+  else {
+    refreshSubconVendorPickerOptions();
+    window.__subconInvoiceLines = null;
+    const linesWrap = document.getElementById('subconInvoiceLinesWrap');
+    if (linesWrap) linesWrap.style.display = 'none';
+  }
+}
+
+// Rebuilds the Vendor picker from vendors used on past PO-layout records
+// (unique by name), newest first, so a repeat vendor can be selected instead
+// of retyped. Picking one auto-fills Name/Address/Attn; "Manual Entry" (the
+// default) leaves the fields as free text for a new/one-off vendor.
+function refreshSubconVendorPickerOptions() {
+  const sel = document.getElementById('subconVendorPicker');
+  if (!sel) return;
+  const prior = sel.value;
+  const seen = {};
+  const vendors = [];
+  (window.subcontractRegister || [])
+    .filter(function(r) { return r.entity !== 'mptmfg' && r.vendorName; })
+    .sort(function(a, b) { return String(b.poNo).localeCompare(String(a.poNo), undefined, {numeric: true}); })
+    .forEach(function(r) {
+      const k = r.vendorName.trim().toLowerCase();
+      if (k && !seen[k]) { seen[k] = true; vendors.push(r); }
+    });
+  const opts = ['<option value="">— Manual Entry —</option>'].concat(vendors.map(function(r, i) {
+    return '<option value="' + i + '" data-name="' + escapeHtml(r.vendorName || '') + '" data-address="' + escapeHtml(r.vendorAddress || '') +
+      '" data-attn="' + escapeHtml(r.vendorAttn || '') + '">' + escapeHtml(r.vendorName) + '</option>';
+  }));
+  sel.innerHTML = opts.join('');
+  if (prior && Array.prototype.some.call(sel.options, function(o) { return o.value === prior; })) sel.value = prior;
+}
+
+// Fills Vendor Name/Address/Attn from the selected picker option. Fields stay
+// editable afterward — this is a starting point, not a lock.
+function applySubconVendorPick() {
+  const sel = document.getElementById('subconVendorPicker');
+  if (!sel) return;
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value) return; // "Manual Entry" — leave fields as-is
+  const nameEl = document.getElementById('subconVendorName');
+  const addrEl = document.getElementById('subconVendorAddress');
+  const attnEl = document.getElementById('subconVendorAttn');
+  if (nameEl) nameEl.value = opt.dataset.name || '';
+  if (addrEl) addrEl.value = opt.dataset.address || '';
+  if (attnEl) attnEl.value = opt.dataset.attn || '';
+  autoSuggestSubconPoRef();
+}
+
+// Rebuilds the PO Ref dropdown from the Subcontract PO register — only actual
+// PO-template records (entity !== 'mptmfg') are valid things to reference,
+// newest first. Preserves the current selection if it's still in the list.
+function refreshSubconPoRefOptions() {
+  const sel = document.getElementById('subconPoRef');
+  if (!sel) return;
+  const prior = sel.value;
+  const poRecords = (window.subcontractRegister || [])
+    .filter(function(r) { return r.entity !== 'mptmfg'; })
+    .slice()
+    .sort(function(a, b) { return String(b.poNo).localeCompare(String(a.poNo), undefined, {numeric: true}); });
+  const opts = ['<option value="">— No PO Ref —</option>'].concat(poRecords.map(function(r) {
+    return '<option value="' + escapeHtml(r.poNo) + '" data-vendor="' + escapeHtml((r.vendorName || '').trim().toLowerCase()) + '">' +
+      'MPT/SC-PO/' + escapeHtml(r.poNo) + ' — ' + escapeHtml(r.vendorName || '—') + ' (' + escapeHtml(r.poDate || '') + ')' +
+      '</option>';
+  }));
+  sel.innerHTML = opts.join('');
+  if (prior && Array.prototype.some.call(sel.options, function(o) { return o.value === prior; })) sel.value = prior;
+}
+
+// Auto-maps the most recent PO issued to the currently-typed vendor name, so
+// when MPT later issues the Invoice for that same order the PO Ref fills in
+// on its own. The user can still override the pick from the dropdown.
+function autoSuggestSubconPoRef() {
+  const sel = document.getElementById('subconPoRef');
+  if (!sel) return;
+  if ((document.getElementById('subconPoTemplate') || {}).value !== 'mptmfg_invoice') return;
+  const vendorNow = ((document.getElementById('subconVendorName') || {}).value || '').trim().toLowerCase();
+  if (!vendorNow) return;
+  const match = Array.prototype.filter.call(sel.options, function(o) { return o.dataset && o.dataset.vendor === vendorNow; })[0];
+  if (match && sel.value !== match.value) { sel.value = match.value; loadSubconInvoiceLines(); }
+}
+
+// ── PARTIAL INVOICE LINE ITEMS (Invoice layout, when a PO Ref is selected) ──
+// Loads the referenced PO's saved line items from the backend and renders an
+// editable table where Qty can be reduced per line — supports issuing an
+// Invoice for only part of what the PO covers. Falls back to the normal
+// Customer-Group-based item list (see generateSubcontractPOPDF) when no PO
+// Ref is selected, or if the fetch fails / returns nothing.
+window.__subconInvoiceLines = null; // array of {..., originalQty, qty (editable), unitCostMYR, totalMYR} or null
+
+async function loadSubconInvoiceLines() {
+  const wrap = document.getElementById('subconInvoiceLinesWrap');
+  const host = document.getElementById('subconInvoiceLinesHost');
+  const poRefVal = (document.getElementById('subconPoRef') || {}).value || '';
+  window.__subconInvoiceLines = null;
+  if (!wrap || !host) return;
+  if (!poRefVal) { wrap.style.display = 'none'; host.innerHTML = ''; return; }
+  wrap.style.display = '';
+  host.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:13px;">Loading PO line items…</div>';
+  try {
+    if (typeof jsonpCall !== 'function' || typeof WEBAPP_URL === 'undefined' || !WEBAPP_URL) {
+      throw new Error('Backend not available');
+    }
+    const json = await jsonpCall({ action: 'get_subcontract_po_lines', poNo: poRefVal }, 15000);
+    if (!json || json.status !== 'ok' || !json.lines || !json.lines.length) {
+      host.innerHTML = '<div style="padding:12px;color:var(--warning);font-size:13px;">No saved line items found for MPT/SC-PO/' +
+        escapeHtml(poRefVal) + '. This Invoice will use the Customer Group selection above instead.</div>';
+      return;
+    }
+    window.__subconInvoiceLines = json.lines.map(function(it) {
+      return {
+        internalCode: it.internalCode || '', item: it.item || '', drawingNo: it.drawingNo || '',
+        lotNo: it.lotNo || '', description: it.description || '',
+        originalQty: Number(it.qty) || 0, qty: Number(it.qty) || 0,
+        unitCostMYR: Number(it.unitCostMYR) || 0, totalMYR: Number(it.totalMYR) || 0,
+        requestedDelivery: it.requestedDelivery || ''
+      };
+    });
+    renderSubconInvoiceLinesTable();
+  } catch (e) {
+    host.innerHTML = '<div style="padding:12px;color:var(--warning);font-size:13px;">Could not load PO line items (' +
+      escapeHtml(e && e.message ? e.message : String(e)) + '). This Invoice will use the Customer Group selection above instead.</div>';
+  }
+}
+
+function renderSubconInvoiceLinesTable() {
+  const host = document.getElementById('subconInvoiceLinesHost');
+  if (!host) return;
+  const lines = window.__subconInvoiceLines || [];
+  const rows = lines.map(function(it, i) {
+    return '<tr>' +
+      '<td style="padding:6px 9px;">' + escapeHtml(it.internalCode || '—') + '</td>' +
+      '<td style="padding:6px 9px;">' + escapeHtml(it.description || it.item || '—') + '</td>' +
+      '<td style="padding:6px 9px;text-align:right;color:var(--muted);">' + it.originalQty.toLocaleString() + '</td>' +
+      '<td style="padding:6px 9px;text-align:right;"><input type="number" min="0" step="any" value="' + it.qty +
+        '" style="width:80px;text-align:right;" oninput="updateSubconInvoiceLineQty(' + i + ',this.value)"></td>' +
+      '<td style="padding:6px 9px;text-align:right;white-space:nowrap;">RM ' + it.unitCostMYR.toFixed(2) + '</td>' +
+      '<td id="subconInvLineAmt' + i + '" style="padding:6px 9px;text-align:right;font-weight:600;white-space:nowrap;">RM ' +
+        it.totalMYR.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) + '</td>' +
+    '</tr>';
+  }).join('');
+  host.innerHTML =
+    '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+      '<thead><tr style="background:#f8fafc;text-align:left;">' +
+        '<th style="padding:6px 9px;">Internal Code</th><th style="padding:6px 9px;">Description</th>' +
+        '<th style="padding:6px 9px;text-align:right;">PO Qty</th><th style="padding:6px 9px;text-align:right;">Invoice Qty</th>' +
+        '<th style="padding:6px 9px;text-align:right;">Unit Price</th><th style="padding:6px 9px;text-align:right;">Amount</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody>' +
+      '<tfoot><tr style="border-top:1px solid var(--border);font-weight:700;">' +
+        '<td colspan="5" style="padding:6px 9px;text-align:right;">Total:</td>' +
+        '<td id="subconInvLineGrandTotal" style="padding:6px 9px;text-align:right;white-space:nowrap;">RM ' +
+          lines.reduce(function(s, it) { return s + it.totalMYR; }, 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) +
+        '</td>' +
+      '</tr></tfoot>' +
+    '</table>';
+}
+
+function updateSubconInvoiceLineQty(i, val) {
+  const lines = window.__subconInvoiceLines;
+  if (!lines || !lines[i]) return;
+  const qty = Math.max(0, Number(val) || 0);
+  lines[i].qty = qty;
+  lines[i].totalMYR = qty * lines[i].unitCostMYR;
+  const amtCell = document.getElementById('subconInvLineAmt' + i);
+  if (amtCell) amtCell.textContent = 'RM ' + lines[i].totalMYR.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+  const grand = document.getElementById('subconInvLineGrandTotal');
+  if (grand) grand.textContent = 'RM ' + lines.reduce(function(s, it) { return s + it.totalMYR; }, 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+// Returns the current partial-invoice line items (qty > 0 only) in the shape
+// buildSubcontractPOPage expects, or null if no PO-Ref lines are loaded.
+function getSubconInvoiceItems() {
+  const lines = window.__subconInvoiceLines;
+  if (!lines || !lines.length) return null;
+  const out = lines.filter(function(it) { return it.qty > 0; }).map(function(it) {
+    return { internalCode: it.internalCode, item: it.item, drawingNo: it.drawingNo, lotNo: it.lotNo,
+             description: it.description, qty: it.qty, unitCostMYR: it.unitCostMYR, totalMYR: it.totalMYR,
+             requestedDelivery: it.requestedDelivery };
+  });
+  return out.length ? out : null;
+}
+
 // ── PO NUMBER ASSIGNMENT (mirrors assignInvNos / assignPvNos) ─────────────────
 function assignSubconPoNo() {
   const startEl = document.getElementById('subconPoNo');
@@ -2675,12 +2917,33 @@ function assignSubconPoNo() {
   return n;
 }
 
+// Formats the MPT Manufacturing "Invoice" doc number: S + YY + MM + "-" + a
+// zero-padded (3-digit) running series number, e.g. S2607-011 = Jul 2026, #011.
+// The running number reuses the same incrementing counter as the PO No field
+// (assignSubconPoNo) — it's the same underlying sequence, just displayed in
+// the invoice-style format when that print layout is selected.
+function formatSubconInvoiceNo(poNo, poDateStr) {
+  var d = poDateStr ? new Date(poDateStr) : new Date();
+  if (isNaN(d.getTime())) d = new Date();
+  var yy = String(d.getFullYear()).slice(-2);
+  var mm = ('0' + (d.getMonth() + 1)).slice(-2);
+  var running = String(parseInt(poNo, 10) || 0);
+  while (running.length < 3) running = '0' + running;
+  return 'S' + yy + mm + '-' + running;
+}
+
 // ── BUILD ONE SUBCONTRACT PO PRINT PAGE ────────────────────────────────────────
-// Buyer/letterhead is always MPT Manufacturing (M) SDN. BHD — this PO is issued
-// FROM MPT Mfg TO the subcontractor entered in the config form, regardless of
-// which entity any downstream customer invoice eventually bills.
-function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorAddress, vendorAttn, remarks, items) {
-  const letterhead = COMPANY_LETTERHEADS.mptmfg;
+// templateType selects the print layout:
+//   'mikuron_po'      (default) — Title "PO", letterhead Mikuron Precision Pte Ltd,
+//                                  with company stamp + signature (same look as the
+//                                  Invoice print layout's stamp block).
+//   'mptmfg_invoice'  — Title "INVOICE", letterhead MPT Manufacturing (M) Sdn Bhd.
+// poRef (invoice layout only) — the original Subcontract PO No this Invoice is
+// being issued against, e.g. "5" for MPT/SC-PO/5. Printed as a "PO Ref:" row.
+function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorAddress, vendorAttn, remarks, items, templateType, poRef) {
+  const tpl = templateType === 'mptmfg_invoice' ? 'mptmfg_invoice' : 'mikuron_po';
+  const letterhead = tpl === 'mptmfg_invoice' ? COMPANY_LETTERHEADS.mptmfg : COMPANY_LETTERHEADS.mikuron;
+  const docTitle = tpl === 'mptmfg_invoice' ? 'INVOICE' : 'PURCHASE ORDER';
   const totalQty = items.reduce(function(s, r) { return s + r.qty; }, 0);
   const totalAmount = items.reduce(function(s, r) { return s + r.totalMYR; }, 0);
 
@@ -2690,10 +2953,10 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
       <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(r.description || r.item || '—')}</td>
       <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(r.drawingNo || '—')}</td>
       <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(r.lotNo || '—')}</td>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${r.qty.toLocaleString()}</td>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">RM ${r.unitCostMYR.toFixed(2)}</td>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">RM ${r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-      <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(r.requestedDelivery || '—')}</td>
+      <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">${r.qty.toLocaleString()}</td>
+      <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.unitCostMYR.toFixed(2)}</td>
+      <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td style="padding:6px 9px;border:1px solid #d1d5db;white-space:nowrap;">${escapeHtml(r.requestedDelivery || '—')}</td>
     </tr>`;
   }).join('');
 
@@ -2704,20 +2967,30 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
       <div class="co-name">${letterhead.name}</div>
       <div class="co-details">${letterhead.details}</div>
     </div>
-    <div class="title-box"><h1>PURCHASE ORDER</h1></div>
+    <div class="title-box"><h1>${docTitle}</h1></div>
   </div>
 
   <div class="info-grid">
     <div class="info-left">
+      ${tpl === 'mptmfg_invoice' ? `
+      <b>Bill To:</b><br>
+      ${escapeHtml(MIKURON_BILL_TO.name)}<br>
+      ${escapeHtml(MIKURON_BILL_TO.address)}<br>
+      Attn: ${escapeHtml(MIKURON_BILL_TO.attn)}
+      ` : `
       <b>Subcontractor / Vendor:</b><br>
       ${escapeHtml(vendorName || '—')}<br>
       ${vendorAddress ? escapeHtml(vendorAddress) + '<br>' : ''}
       ${vendorAttn ? 'Attn: ' + escapeHtml(vendorAttn) : ''}
+      `}
     </div>
     <div class="info-right">
       <table>
-        <tr><td>PO No:</td><td>MPT/SC-PO/${poNo}</td></tr>
-        <tr><td>PO Date:</td><td>${escapeHtml(poDate)}</td></tr>
+        ${tpl === 'mptmfg_invoice'
+          ? `<tr><td>Invoice No:</td><td>${formatSubconInvoiceNo(poNo, poDate)}</td></tr>`
+          : `<tr><td>PO No:</td><td>MPT/SC-PO/${poNo}</td></tr>`}
+        <tr><td>${tpl === 'mptmfg_invoice' ? 'Invoice Date:' : 'PO Date:'}</td><td>${escapeHtml(poDate)}</td></tr>
+        ${tpl === 'mptmfg_invoice' ? `<tr><td>PO Ref:</td><td>${poRef ? 'MPT/SC-PO/' + escapeHtml(poRef) : '—'}</td></tr>` : ''}
         ${deliveryTerms ? `<tr><td>Delivery Terms:</td><td>${escapeHtml(deliveryTerms)}</td></tr>` : ''}
       </table>
     </div>
@@ -2740,9 +3013,9 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
     <tfoot>
       <tr style="font-weight:700;">
         <td colspan="4" style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">Total:</td>
-        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${totalQty.toLocaleString()}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">${totalQty.toLocaleString()}</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;"></td>
-        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">RM ${totalAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${totalAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;"></td>
       </tr>
     </tfoot>
@@ -2750,12 +3023,10 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
 
   ${remarks ? `<div style="margin-top:16px;font-size:12px;"><b>Remarks:</b> ${escapeHtml(remarks)}</div>` : ''}
 
-  <div style="display:flex;justify-content:space-between;margin-top:60px;">
-    <div style="text-align:center;width:200px;">
-      <div style="border-top:1px solid #333;padding-top:6px;">Authorized By (MPT Mfg)</div>
-    </div>
-    <div style="text-align:center;width:200px;">
-      <div style="border-top:1px solid #333;padding-top:6px;">Acknowledged By (Vendor)</div>
+  <div style="display:flex;margin-top:60px;">
+    <div class="stamp-wrap" style="width:200px;">
+      <img class="stamp-img" src="${STAMP_B64}" alt="" style="width:150px;">
+      <div class="stamp-caption">Authorized By (${letterhead.shortName || letterhead.name.replace(/<[^>]*>/g,'')})</div>
     </div>
   </div>
 </div>`;
@@ -2767,22 +3038,30 @@ function generateSubcontractPOPDF() {
   isGeneratingSubconPO = true;
 
   try {
+    const templateType = (document.getElementById('subconPoTemplate') || {}).value || 'mikuron_po';
     const vendorName = document.getElementById('subconVendorName').value.trim();
-    if (!vendorName) { alert('Please enter the Subcontractor / Vendor Name.'); return; }
+    if (templateType !== 'mptmfg_invoice' && !vendorName) { alert('Please enter the Subcontractor / Vendor Name.'); return; }
 
     const poDate = document.getElementById('subconPoDate').value || new Date().toISOString().slice(0,10);
     const deliveryTerms = document.getElementById('subconPoDeliveryTerms').value.trim();
     const vendorAddress = document.getElementById('subconVendorAddress').value.trim();
     const vendorAttn = document.getElementById('subconVendorAttn').value.trim();
     const remarks = document.getElementById('subconPoRemarks').value.trim();
+    const poRef = templateType === 'mptmfg_invoice' ? ((document.getElementById('subconPoRef') || {}).value || '') : '';
 
-    const items = subconData.filter(function(r) { return subconSelectedGroups.has(r.customerGroup); });
+    // Partial-invoice path: if the Invoice layout has a PO Ref with edited
+    // line items loaded, bill exactly those (possibly reduced) quantities
+    // instead of the Customer-Group selection.
+    const partialItems = templateType === 'mptmfg_invoice' && poRef && typeof getSubconInvoiceItems === 'function'
+      ? getSubconInvoiceItems() : null;
+    const items = partialItems || subconData.filter(function(r) { return subconSelectedGroups.has(r.customerGroup); });
     if (items.length === 0) { alert('Nothing to generate.'); return; }
 
     const poNo = assignSubconPoNo();
-    const pageHtml = buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorAddress, vendorAttn, remarks, items);
+    const pageHtml = buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorAddress, vendorAttn, remarks, items, templateType, poRef);
+    const docLabel = templateType === 'mptmfg_invoice' ? formatSubconInvoiceNo(poNo, poDate) : ('MPT-SC-PO-' + poNo);
     const combinedHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Subcontract PO MPT-SC-PO-${poNo} — ${new Date().toLocaleDateString('en-GB')}</title>
+<title>${templateType === 'mptmfg_invoice' ? 'Invoice' : 'Subcontract PO'} ${docLabel} — ${new Date().toLocaleDateString('en-GB')}</title>
 ${getPrintCSS()}
 <script>
   document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
@@ -9374,6 +9653,30 @@ function exportSOAPDF() {
   window.subcontractRegister = window.subcontractRegister || [];
   window.__scpoStore = window.__scpoStore || {};   // poNo -> full print data for reprint
 
+  // ── Persist the print-layout cache across page reloads ──────────────────────
+  // __scpoStore only ever lived in memory, so refreshing/closing the dashboard
+  // tab silently wiped every generated PO's reprintable layout — that's the
+  // "print layout gone missing" bug. Mirror it into localStorage (best-effort;
+  // wrapped in try/catch so a full/blocked storage never breaks PO generation)
+  // and rehydrate it on boot, before the register is first rendered.
+  var SCPO_STORE_KEY = 'scpoPageHtmlStore_v1';
+  function saveScpoStoreLocal(){
+    try { localStorage.setItem(SCPO_STORE_KEY, JSON.stringify(window.__scpoStore)); }
+    catch(e){ console.warn('SCPO: could not persist print-layout cache locally:', e.message); }
+  }
+  function loadScpoStoreLocal(){
+    try {
+      var raw = localStorage.getItem(SCPO_STORE_KEY);
+      if (raw){
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object'){
+          Object.keys(parsed).forEach(function(k){ if (!(k in window.__scpoStore)) window.__scpoStore[k] = parsed[k]; });
+        }
+      }
+    } catch(e){ console.warn('SCPO: could not load cached print layouts:', e.message); }
+  }
+  loadScpoStoreLocal();
+
   function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function rm(v){ var n=Number(v); return isNaN(n)?'-':'RM '+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -9426,7 +9729,12 @@ function exportSOAPDF() {
       '</style>';
     var holder = document.createElement('div');
     holder.style.cssText = 'position:fixed;left:0;top:0;width:186mm;background:#fff;opacity:0;z-index:-9999;pointer-events:none;';
-    holder.innerHTML = css + '<div id="__scpoPages" style="padding-left:10mm;">' + pageHtml + '</div>';
+    // NOTE: no left padding here — .page below already declares its own
+    // width:186mm to fill this holder exactly. Adding padding on top of that
+    // (as an earlier version did, copied from the invoice PDF renderer) made
+    // the actual rendered content 196mm wide inside a 186mm holder, so
+    // html2canvas captured the overflow and it printed outside the A4 margins.
+    holder.innerHTML = css + '<div id="__scpoPages">' + pageHtml + '</div>';
     document.body.appendChild(holder);
     try {
       await new Promise(function(resolve){
@@ -9459,12 +9767,14 @@ function exportSOAPDF() {
       poNo: String(meta.poNo), poDate: meta.poDate, vendorName: meta.vendorName,
       vendorAddress: meta.vendorAddress, vendorAttn: meta.vendorAttn,
       deliveryTerms: meta.deliveryTerms, remarks: meta.remarks, entity: meta.entity || 'mptmfg',
+      poRef: meta.poRef || '',
       currency: 'MYR', total: total, status: 'Active', fileUrl:'', fileId:''
     };
     // local-first so it shows instantly
     window.subcontractRegister = window.subcontractRegister.filter(function(r){ return r.poNo !== rec.poNo; });
     window.subcontractRegister.push(rec);
     window.__scpoStore[rec.poNo] = { pageHtml: pageHtml };
+    saveScpoStoreLocal();
     renderSubcontractRegister();
 
     if (typeof WEBAPP_URL === 'undefined' || !WEBAPP_URL) return;
@@ -9479,6 +9789,7 @@ function exportSOAPDF() {
     form.append('deliveryTerms', rec.deliveryTerms || '');
     form.append('remarks', rec.remarks || '');
     form.append('entity', rec.entity || '');
+    form.append('poRef', rec.poRef || '');
     form.append('currency', 'MYR');
     form.append('total', String(total));
     form.append('status','Active');
@@ -9489,12 +9800,16 @@ function exportSOAPDF() {
                requestedDelivery:it.requestedDelivery||'' };
     })));
 
+    var pdfRenderFailed = false;
     try {
       var blob = await renderScPoPdfBlob(pageHtml);
       form.append('fileName', 'MPT-SC-PO-'+rec.poNo+'_'+new Date().toISOString().slice(0,10)+'.pdf');
       form.append('mimeType','application/pdf');
       form.append('fileData', await blobToBase64(blob));
-    } catch(e){ console.error('SC-PO PDF render failed (record still saved):', e); }
+    } catch(e){
+      pdfRenderFailed = true;
+      console.error('SC-PO PDF render failed (record still saved, layout kept in local cache):', e);
+    }
 
     try {
       var resp = await fetch(WEBAPP_URL, { method:'POST', body:form });
@@ -9503,6 +9818,23 @@ function exportSOAPDF() {
       console.log('save_subcontract_po response for MPT/SC-PO/'+rec.poNo+':', json);
       if (json && json.fileUrl){ rec.fileUrl = json.fileUrl; rec.fileId = json.fileId||''; renderSubcontractRegister(); }
     } catch(e){ console.error('SC-PO save POST failed:', e); }
+
+    // Surface the failure instead of letting it fail silently — the record and
+    // its print layout are both safe (sheet row + local cache), but the user
+    // should know the Drive PDF didn't save so "Saving…" won't resolve on its own.
+    if (pdfRenderFailed) showScpoWarning('MPT/SC-PO/'+rec.poNo+': PDF could not be saved to Drive. The layout is cached in this browser — use Reprint, or click "🔄 Sync from Drive" later to retry.');
+  }
+
+  function showScpoWarning(msg){
+    try {
+      var el = document.createElement('div');
+      el.textContent = '⚠ ' + msg;
+      el.style.cssText = 'position:fixed;bottom:20px;right:20px;max-width:360px;background:#fef3c7;color:#92400e;'+
+        'border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;font-size:12.5px;line-height:1.4;'+
+        'box-shadow:0 4px 14px rgba(0,0,0,.15);z-index:99999;';
+      document.body.appendChild(el);
+      setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 9000);
+    } catch(e){ console.warn(msg); }
   }
 
   // Load existing POs from the Sheet on demand
@@ -9534,8 +9866,9 @@ function exportSOAPDF() {
       return String(b.poNo).localeCompare(String(a.poNo), undefined, {numeric:true});
     });
     var body = rows.length ? rows.map(function(r){
+      var isInvoice = r.entity === 'mptmfg';
       var pdf = r.fileUrl
-        ? '<a href="'+r.fileUrl+'" target="_blank" style="color:#1e3a8a;text-decoration:underline;font-size:12px;">PO PDF ↗</a>'
+        ? '<a href="'+r.fileUrl+'" target="_blank" style="color:#1e3a8a;text-decoration:underline;font-size:12px;">'+(isInvoice?'Invoice PDF ↗':'PO PDF ↗')+'</a>'
         : '<span style="font-size:11px;color:#94a3b8;">Saving…</span>';
       var reprint = (window.__scpoStore[r.poNo] || r.fileUrl)
         ? '<button onclick="reprintScPo(\''+String(r.poNo).replace(/'/g,'')+'\')" style="margin-top:3px;display:block;font-size:11px;padding:3px 8px;border:1px solid #1e3a8a;border-radius:5px;background:#eff6ff;color:#1e3a8a;cursor:pointer;">🖨 Reprint</button>'
@@ -9543,8 +9876,11 @@ function exportSOAPDF() {
       var entityBadge = '<span style="font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;'+
         (r.entity==='mikuron'?'background:#dbeafe;color:#1e40af;':'background:#fef3c7;color:#92400e;')+'">'+
         (r.entity==='mikuron'?'Mikuron SG':'MPT Mfg')+'</span>';
+      var docNo = isInvoice ? esc(formatSubconInvoiceNo(r.poNo, r.poDate)) : ('MPT/SC-PO/'+esc(r.poNo));
+      var poRefLine = (isInvoice && r.poRef)
+        ? '<div style="font-size:10.5px;color:#64748b;font-weight:400;">Ref: MPT/SC-PO/'+esc(r.poRef)+'</div>' : '';
       return '<tr style="border-bottom:1px solid #eef2f7;">'+
-        '<td style="padding:8px 12px;font-weight:600;">MPT/SC-PO/'+esc(r.poNo)+entityBadge+'</td>'+
+        '<td style="padding:8px 12px;font-weight:600;">'+docNo+entityBadge+poRefLine+'</td>'+
         '<td style="padding:8px 12px;">'+esc(r.poDate||'-')+'</td>'+
         '<td style="padding:8px 12px;">'+esc(r.vendorName||'-')+'</td>'+
         '<td style="padding:8px 12px;text-align:right;">'+rm(r.total)+'</td>'+
@@ -9560,18 +9896,26 @@ function exportSOAPDF() {
       '</div>'+
       '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:13px;">'+
         '<thead><tr style="background:#9a3412;color:#fff;text-align:left;">'+
-          '<th style="padding:9px 12px;">PO No</th><th style="padding:9px 12px;">PO Date</th>'+
+          '<th style="padding:9px 12px;">PO / Invoice No</th><th style="padding:9px 12px;">Date</th>'+
           '<th style="padding:9px 12px;">Vendor</th><th style="padding:9px 12px;text-align:right;">Total (MYR)</th>'+
-          '<th style="padding:9px 12px;text-align:center;">Status</th><th style="padding:9px 12px;">PO PDF</th>'+
+          '<th style="padding:9px 12px;text-align:center;">Status</th><th style="padding:9px 12px;">PDF</th>'+
         '</tr></thead><tbody>'+body+'</tbody>'+
       '</table></div>';
+    try { if (typeof refreshSubconPoRefOptions === 'function') refreshSubconPoRefOptions(); } catch(e){}
+    try {
+      var tplNow = (document.getElementById('subconPoTemplate')||{}).value;
+      if (typeof refreshSubconVendorPickerOptions === 'function' && tplNow !== 'mptmfg_invoice') refreshSubconVendorPickerOptions();
+    } catch(e){}
   };
 
   window.reprintScPo = function(poNo){
     var d = window.__scpoStore[poNo];
     if (d && d.pageHtml){
+      var srcRec = window.subcontractRegister.filter(function(r){ return r.poNo===poNo; })[0];
+      var isInvoice = srcRec && srcRec.entity === 'mptmfg';
+      var docLabel = isInvoice ? formatSubconInvoiceNo(poNo, srcRec && srcRec.poDate) : ('MPT-SC-PO-'+poNo);
       var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'+
-        '<title>Subcontract PO MPT-SC-PO-'+poNo+'</title>'+
+        '<title>'+(isInvoice?'Invoice':'Subcontract PO')+' '+docLabel+'</title>'+
         (typeof getPrintCSS==='function'?getPrintCSS():'')+
         '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},400);});<\/script>'+
         '</head><body>'+d.pageHtml+'</body></html>';
@@ -9582,8 +9926,7 @@ function exportSOAPDF() {
     var rec = window.subcontractRegister.filter(function(r){ return r.poNo===poNo; })[0];
     if (rec && rec.fileUrl){ window.open(rec.fileUrl,'_blank'); return; }
     alert('No reprint source for MPT/SC-PO/'+poNo+'.');
-       // Normalise poDate to YYYY-MM-DD (handles DD/MM/YYYY, YYYY-MM-DD, or Date input)
-        };
+  };
 
   // ── Hook generateSubcontractPOPDF: capture meta+items+html, then persist ─────
   function hookGenerate(){
@@ -9593,15 +9936,21 @@ function exportSOAPDF() {
       // Snapshot the inputs BEFORE the original runs (it bumps the PO counter)
       var poNoField = document.getElementById('subconPoNo');
       var poNoVal = poNoField ? parseInt(poNoField.value,10) : null;
+      var templateType = (document.getElementById('subconPoTemplate')||{}).value || 'mikuron_po';
       var meta = {
         poNo: poNoVal,
         poDate: (document.getElementById('subconPoDate')||{}).value || new Date().toISOString().slice(0,10),
         deliveryTerms: (document.getElementById('subconPoDeliveryTerms')||{}).value || '',
-        vendorName: (document.getElementById('subconVendorName')||{}).value || '',
-        vendorAddress: (document.getElementById('subconVendorAddress')||{}).value || '',
-        vendorAttn: (document.getElementById('subconVendorAttn')||{}).value || '',
+        // Invoice layout always bills the fixed Mikuron entity, not the vendor
+        // fields (those are hidden in that mode and may hold stale text from
+        // an earlier PO) — record the true bill-to party for the register.
+        vendorName: templateType === 'mptmfg_invoice' ? MIKURON_BILL_TO.name : ((document.getElementById('subconVendorName')||{}).value || ''),
+        vendorAddress: templateType === 'mptmfg_invoice' ? MIKURON_BILL_TO.address : ((document.getElementById('subconVendorAddress')||{}).value || ''),
+        vendorAttn: templateType === 'mptmfg_invoice' ? MIKURON_BILL_TO.attn : ((document.getElementById('subconVendorAttn')||{}).value || ''),
         remarks: (document.getElementById('subconPoRemarks')||{}).value || '',
-        entity: 'mptmfg'
+        templateType: templateType,
+        poRef: templateType === 'mptmfg_invoice' ? ((document.getElementById('subconPoRef')||{}).value || '') : '',
+        entity: templateType === 'mptmfg_invoice' ? 'mptmfg' : 'mikuron'
       };
            // Normalise poDate to YYYY-MM-DD (handles DD/MM/YYYY, YYYY-MM-DD, or Date input)
       (function(){
@@ -9616,16 +9965,20 @@ function exportSOAPDF() {
         }
       })();
       
-      var items = (typeof subconData !== 'undefined')
+      // Mirror generateSubcontractPOPDF's item sourcing: partial-invoice edited
+      // lines take priority over the Customer-Group selection when present.
+      var partialItems = (meta.templateType === 'mptmfg_invoice' && meta.poRef && typeof getSubconInvoiceItems === 'function')
+        ? getSubconInvoiceItems() : null;
+      var items = partialItems || ((typeof subconData !== 'undefined')
         ? subconData.filter(function(r){ return subconSelectedGroups.has(r.customerGroup); })
-        : [];
+        : []);
 
       // Rebuild the same page HTML the original prints, so we save an identical PDF
       var pageHtml = '';
       try {
         if (typeof buildSubcontractPOPage === 'function' && items.length){
           pageHtml = buildSubcontractPOPage(meta.poNo, meta.poDate, meta.deliveryTerms,
-            meta.vendorName, meta.vendorAddress, meta.vendorAttn, meta.remarks, items);
+            meta.vendorName, meta.vendorAddress, meta.vendorAttn, meta.remarks, items, meta.templateType, meta.poRef);
         }
       } catch(e){ console.error('rebuild SC-PO page failed:', e); }
 
