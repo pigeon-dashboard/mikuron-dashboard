@@ -572,7 +572,45 @@
       <button class="export-btn" onclick="exportSubconToExcel()">⬇ Export Table to Excel</button>
       <button class="export-btn" onclick="exportSubconToPPTX()">⬇ Export to PowerPoint</button>
       <button class="export-btn" id="genSubconPoBtn" onclick="generateSubcontractPOPDF()" disabled style="background:#1e3a8a;color:#fff;border-color:#1e3a8a;">🖨 Print Subcontract PO</button>
+      <button class="export-btn" onclick="toggleInvMasterPricePanel()">📋 Manage Master Prices</button>
       <button class="export-btn" onclick="clearSubcon()" style="margin-left:auto">✕ Clear Sub-Contract Tab</button>
+    </div>
+
+    <!-- Inventory Master Price manager — hidden by default; this is what actually
+         creates the "Inventory Master Price" sheet (it doesn't exist until the
+         first row is saved from here) and lets you add/update entries without
+         touching the Sheet directly. -->
+    <div id="invMasterPricePanel" style="display:none; margin-bottom:16px; background:#fff; border:1px solid var(--border); border-radius:10px; padding:16px;">
+      <h3 style="margin:0 0 4px;font-size:15px;">Inventory Master Price</h3>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;">
+        Customer + Drawing No + Item is the match key. A saved row here overrides the calculated SGD×forex×margin price for that combination the next time you click "Convert Selected to Sub-Contract POs".
+      </div>
+      <div class="inv-config" style="margin-bottom:12px;">
+        <div style="grid-column: span 2;">
+          <label>Customer Name</label>
+          <input type="text" id="invMpCustomer" placeholder="Must match the Sales Order's Customer Name exactly">
+        </div>
+        <div>
+          <label>Drawing No</label>
+          <input type="text" id="invMpDrawing" placeholder="e.g. AM261303">
+        </div>
+        <div>
+          <label>Item</label>
+          <input type="text" id="invMpItem" placeholder="Item code/ref (optional if Drawing No is unique)">
+        </div>
+        <div>
+          <label>Rev No</label>
+          <input type="text" id="invMpRevNo" placeholder="Optional">
+        </div>
+        <div>
+          <label>Unit Price (MYR)</label>
+          <input type="number" id="invMpPrice" step="0.01" min="0" placeholder="0.00">
+        </div>
+        <div style="align-self:end;">
+          <button class="export-btn" id="invMpSaveBtn" onclick="saveInvMasterPriceRow()" style="background:#1e3a8a;color:#fff;border-color:#1e3a8a;">💾 Save Price</button>
+        </div>
+      </div>
+      <div id="invMasterPriceHost" style="overflow-x:auto;"></div>
     </div>
 
     <!-- PO generation config — appears once at least one group is selected for print -->
@@ -2551,6 +2589,8 @@ function invMasterKey(customer, drawing, item) {
   return [customer, drawing, item].map(function(v) { return String(v == null ? '' : v).trim().toLowerCase(); }).join('|||');
 }
 
+window.__invMasterPriceList = [];
+
 async function loadInventoryMasterPrice() {
   try {
     if (typeof jsonpCall !== 'function' || typeof WEBAPP_URL === 'undefined' || !WEBAPP_URL) return;
@@ -2559,8 +2599,108 @@ async function loadInventoryMasterPrice() {
       const map = {};
       json.records.forEach(function(r) { map[invMasterKey(r.customer, r.drawingNo, r.item)] = r; });
       window.__invMasterPriceMap = map;
+      window.__invMasterPriceList = json.records;
     }
   } catch (e) { console.warn('loadInventoryMasterPrice failed:', e.message); }
+}
+
+// ── Manage Master Prices panel: toggle open/closed, render the list, save a row ──
+async function toggleInvMasterPricePanel() {
+  const panel = document.getElementById('invMasterPricePanel');
+  if (!panel) return;
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  if (opening) {
+    renderInvMasterPriceTable(); // show cached data immediately, if any
+    await loadInventoryMasterPrice();
+    renderInvMasterPriceTable();
+  }
+}
+
+function renderInvMasterPriceTable() {
+  const host = document.getElementById('invMasterPriceHost');
+  if (!host) return;
+  const list = window.__invMasterPriceList || [];
+  if (!list.length) {
+    host.innerHTML = '<div style="font-size:12.5px;color:var(--muted);padding:8px 2px;">No master price entries saved yet.</div>';
+    return;
+  }
+  const rows = list.map(function(r) {
+    return '<tr>' +
+      '<td>' + escapeHtml(r.customer) + '</td>' +
+      '<td>' + escapeHtml(r.drawingNo) + '</td>' +
+      '<td>' + escapeHtml(r.item) + '</td>' +
+      '<td>' + escapeHtml(r.revNo) + '</td>' +
+      '<td style="text-align:right;white-space:nowrap;">' + Number(r.price || 0).toFixed(2) + ' ' + escapeHtml(r.currency || 'MYR') + '</td>' +
+      '<td style="white-space:nowrap;">' + escapeHtml(r.lastUpdated) + '</td>' +
+      '<td><button class="export-btn" style="padding:4px 10px;font-size:11.5px;" onclick="editInvMasterPriceRow(\'' +
+        String(invMasterKey(r.customer, r.drawingNo, r.item)).replace(/'/g,"\\'") + '\')">Edit</button></td>' +
+    '</tr>';
+  }).join('');
+  host.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12.5px;">' +
+    '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);color:var(--muted);">' +
+      '<th style="padding:6px 8px;">Customer</th><th style="padding:6px 8px;">Drawing No</th>' +
+      '<th style="padding:6px 8px;">Item</th><th style="padding:6px 8px;">Rev No</th>' +
+      '<th style="padding:6px 8px;text-align:right;">Unit Price</th><th style="padding:6px 8px;">Last Updated</th>' +
+      '<th style="padding:6px 8px;"></th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function editInvMasterPriceRow(key) {
+  const rec = (window.__invMasterPriceList || []).find(function(r) { return invMasterKey(r.customer, r.drawingNo, r.item) === key; });
+  if (!rec) return;
+  document.getElementById('invMpCustomer').value = rec.customer || '';
+  document.getElementById('invMpDrawing').value = rec.drawingNo || '';
+  document.getElementById('invMpItem').value = rec.item || '';
+  document.getElementById('invMpRevNo').value = rec.revNo || '';
+  document.getElementById('invMpPrice').value = rec.price || '';
+  document.getElementById('invMpCustomer').focus();
+}
+
+async function saveInvMasterPriceRow() {
+  const customer = (document.getElementById('invMpCustomer').value || '').trim();
+  const drawingNo = (document.getElementById('invMpDrawing').value || '').trim();
+  const item = (document.getElementById('invMpItem').value || '').trim();
+  const revNo = (document.getElementById('invMpRevNo').value || '').trim();
+  const priceStr = (document.getElementById('invMpPrice').value || '').trim();
+
+  if (!customer) { alert('Customer Name is required.'); return; }
+  if (!drawingNo && !item) { alert('Enter a Drawing No or an Item so this price can be matched later.'); return; }
+  if (!priceStr || isNaN(parseFloat(priceStr))) { alert('Enter a valid Unit Price (MYR).'); return; }
+
+  if (typeof WEBAPP_URL === 'undefined' || !WEBAPP_URL) { alert('No backend URL configured — cannot save.'); return; }
+
+  const btn = document.getElementById('invMpSaveBtn');
+  const origLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try {
+    const form = new URLSearchParams();
+    form.append('action', 'save_inventory_master_price');
+    form.append('customer', customer);
+    form.append('drawingNo', drawingNo);
+    form.append('item', item);
+    form.append('revNo', revNo);
+    form.append('price', priceStr);
+    form.append('currency', 'MYR');
+
+    const resp = await fetch(WEBAPP_URL, { method: 'POST', body: form });
+    const text = await resp.text();
+    let json;
+    try { json = JSON.parse(text); } catch (e) { const m = text.match(/\{[\s\S]*\}/); json = m ? JSON.parse(m[0]) : { status: 'error', message: text.slice(0, 160) }; }
+
+    if (json && json.status === 'ok') {
+      document.getElementById('invMpPrice').value = '';
+      await loadInventoryMasterPrice();
+      renderInvMasterPriceTable();
+    } else {
+      alert('Save failed: ' + (json && json.message ? json.message : 'unknown error'));
+    }
+  } catch (e) {
+    alert('Save failed: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origLabel || '💾 Save Price'; }
+  }
 }
 
 async function convertSelectedToSubcon() {
