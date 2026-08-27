@@ -2735,8 +2735,12 @@ async function convertSelectedToSubcon() {
 
       const masterHit = window.__invMasterPriceMap[invMasterKey(custName, drawingNo, itemRef)];
       const priceSource = (masterHit && masterHit.price) ? 'master' : 'calculated';
-      const unitCostMYR = priceSource === 'master' ? Number(masterHit.price) : (unitPriceSGD * rate * marginFactor);
-      const totalMYR = unitCostMYR * qty;
+      const unitCostMYRRaw = priceSource === 'master' ? Number(masterHit.price) : (unitPriceSGD * rate * marginFactor);
+      // Round DOWN to 1 decimal place here — the single source of truth for
+      // this PO's pricing, so the printed PDF and the Sheet register always
+      // show the same figure (the .gs backend floors to 1dp on save too).
+      const unitCostMYR = Math.floor(unitCostMYRRaw * 10) / 10;
+      const totalMYR = Math.floor(unitCostMYR * qty * 10) / 10;
 
       subconData.push({
         customerGroup: groupEntry.groupCode,
@@ -2839,8 +2843,8 @@ function renderSubcon() {
           case 'unitPriceSGD': value = r.unitPriceSGD ? '$' + r.unitPriceSGD.toFixed(2) : '-'; break;
           case 'forexRate': value = r.forexRate ? r.forexRate.toFixed(4) : '-'; break;
           case 'marginPct': value = r.marginPct + '%'; break;
-          case 'unitCostMYR': value = 'RM ' + r.unitCostMYR.toFixed(2); break;
-          case 'totalMYR': value = 'RM ' + r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); break;
+          case 'unitCostMYR': value = 'RM ' + r.unitCostMYR.toFixed(1); break;
+          case 'totalMYR': value = 'RM ' + r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1}); break;
           case 'status': value = `<span class="badge onhold">${r.status}</span>`; break;
           case 'qty': value = r.qty.toLocaleString(); break;
           default: value = r[col] || '-';
@@ -3032,9 +3036,9 @@ function renderSubconInvoiceLinesTable() {
       '<td style="padding:6px 9px;text-align:right;color:var(--muted);">' + it.originalQty.toLocaleString() + '</td>' +
       '<td style="padding:6px 9px;text-align:right;"><input type="number" min="0" step="any" value="' + it.qty +
         '" style="width:80px;text-align:right;" oninput="updateSubconInvoiceLineQty(' + i + ',this.value)"></td>' +
-      '<td style="padding:6px 9px;text-align:right;white-space:nowrap;">RM ' + it.unitCostMYR.toFixed(2) + '</td>' +
+      '<td style="padding:6px 9px;text-align:right;white-space:nowrap;">RM ' + it.unitCostMYR.toFixed(1) + '</td>' +
       '<td id="subconInvLineAmt' + i + '" style="padding:6px 9px;text-align:right;font-weight:600;white-space:nowrap;">RM ' +
-        it.totalMYR.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) + '</td>' +
+        it.totalMYR.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1}) + '</td>' +
     '</tr>';
   }).join('');
   host.innerHTML =
@@ -3047,7 +3051,7 @@ function renderSubconInvoiceLinesTable() {
       '<tfoot><tr style="border-top:1px solid var(--border);font-weight:700;">' +
         '<td colspan="6" style="padding:6px 9px;text-align:right;">Total:</td>' +
         '<td id="subconInvLineGrandTotal" style="padding:6px 9px;text-align:right;white-space:nowrap;">RM ' +
-          lines.reduce(function(s, it) { return s + it.totalMYR; }, 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) +
+          lines.reduce(function(s, it) { return s + it.totalMYR; }, 0).toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1}) +
         '</td>' +
       '</tr></tfoot>' +
     '</table>';
@@ -3058,11 +3062,11 @@ function updateSubconInvoiceLineQty(i, val) {
   if (!lines || !lines[i]) return;
   const qty = Math.max(0, Number(val) || 0);
   lines[i].qty = qty;
-  lines[i].totalMYR = qty * lines[i].unitCostMYR;
+  lines[i].totalMYR = Math.floor(qty * lines[i].unitCostMYR * 10) / 10;
   const amtCell = document.getElementById('subconInvLineAmt' + i);
-  if (amtCell) amtCell.textContent = 'RM ' + lines[i].totalMYR.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+  if (amtCell) amtCell.textContent = 'RM ' + lines[i].totalMYR.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1});
   const grand = document.getElementById('subconInvLineGrandTotal');
-  if (grand) grand.textContent = 'RM ' + lines.reduce(function(s, it) { return s + it.totalMYR; }, 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+  if (grand) grand.textContent = 'RM ' + lines.reduce(function(s, it) { return s + it.totalMYR; }, 0).toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1});
 }
 
 // Returns the current partial-invoice line items (qty > 0 only) in the shape
@@ -3125,8 +3129,8 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
       <td style="padding:5px 6px;border:1px solid #d1d5db;">${escapeHtml(r.drawingNo || '—')}</td>
       <td style="padding:5px 6px;border:1px solid #d1d5db;">${escapeHtml(r.lotNo || '—')}</td>
       <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">${r.qty.toLocaleString()}</td>
-      <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.unitCostMYR.toFixed(2)}</td>
-      <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.unitCostMYR.toFixed(1)}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
       <td style="padding:5px 6px;border:1px solid #d1d5db;white-space:nowrap;">${escapeHtml(r.requestedDelivery || '—')}</td>
     </tr>`;
   }).join('');
@@ -3187,7 +3191,7 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
         <td colspan="5" style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">Total:</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">${totalQty.toLocaleString()}</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;"></td>
-        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${totalAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${totalAmount.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;"></td>
       </tr>
     </tfoot>
@@ -3534,7 +3538,7 @@ function exportSubconToPPTX() {
     s.addText(`Customer Group: ${groupCode}`, { x: 0.6, y: 0.35, w: 9, h: 0.6, fontSize: 26, bold: true, color: TEXT, fontFace: 'Calibri' });
 
     s.addShape(pptx.ShapeType.roundRect, { x: 10.2, y: 0.35, w: 2.5, h: 0.95, fill: { color: LIGHT }, rectRadius: 0.08 });
-    s.addText('RM ' + groupTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}), { x: 10.2, y: 0.42, w: 2.5, h: 0.5, fontSize: 18, bold: true, color: ACCENT, align: 'center', fontFace: 'Calibri' });
+    s.addText('RM ' + groupTotal.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1}), { x: 10.2, y: 0.42, w: 2.5, h: 0.5, fontSize: 18, bold: true, color: ACCENT, align: 'center', fontFace: 'Calibri' });
     s.addText('Total (MYR)', { x: 10.2, y: 0.9, w: 2.5, h: 0.35, fontSize: 11, color: MUTED, align: 'center', fontFace: 'Calibri' });
 
     const tableCols = ['Internal Code','Item Description','Qty','Unit Cost (MYR)','Total (MYR)','Status'];
@@ -3544,8 +3548,8 @@ function exportSubconToPPTX() {
         { text: r.internalCode, options: { fontSize: 10, color: TEXT, bold: true } },
         { text: r.description || '-', options: { fontSize: 10, color: TEXT } },
         { text: r.qty.toLocaleString(), options: { fontSize: 10, color: TEXT } },
-        { text: 'RM ' + r.unitCostMYR.toFixed(2), options: { fontSize: 10, color: TEXT } },
-        { text: 'RM ' + r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}), options: { fontSize: 10, color: TEXT } },
+        { text: 'RM ' + r.unitCostMYR.toFixed(1), options: { fontSize: 10, color: TEXT } },
+        { text: 'RM ' + r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1}), options: { fontSize: 10, color: TEXT } },
         { text: r.status, options: { fontSize: 10, color: TEXT } }
       ]);
     });
@@ -9912,7 +9916,18 @@ function exportSOAPDF() {
   var SCPO_STORE_KEY = 'scpoPageHtmlStore_v1';
   function saveScpoStoreLocal(){
     try { localStorage.setItem(SCPO_STORE_KEY, JSON.stringify(window.__scpoStore)); }
-    catch(e){ console.warn('SCPO: could not persist print-layout cache locally:', e.message); }
+    catch(e){
+      console.warn('SCPO: could not persist print-layout cache locally:', e.message);
+      // Surface this once per page load instead of failing silently — a
+      // silent failure here is exactly how the old "print layout missing"
+      // bug went unnoticed. showScpoWarning() is defined further down this
+      // file but hoisted, so it's callable here.
+      if (!window.__scpoStoreSaveWarned){
+        window.__scpoStoreSaveWarned = true;
+        try { showScpoWarning('Could not save the reprint cache to this browser (storage may be full). Reprint will still work for POs generated earlier in this session, but not after you close this tab.'); }
+        catch(e2){}
+      }
+    }
   }
   function loadScpoStoreLocal(){
     try {
@@ -9929,7 +9944,7 @@ function exportSOAPDF() {
 
   function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-  function rm(v){ var n=Number(v); return isNaN(n)?'-':'RM '+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function rm(v){ var n=Number(v); return isNaN(n)?'-':'RM '+n.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1}); }
 
   function blobToBase64(blob){
     return new Promise(function(res,rej){
@@ -10023,7 +10038,19 @@ function exportSOAPDF() {
     // local-first so it shows instantly
     window.subcontractRegister = window.subcontractRegister.filter(function(r){ return r.poNo !== rec.poNo; });
     window.subcontractRegister.push(rec);
-    window.__scpoStore[rec.poNo] = { pageHtml: pageHtml };
+    // Store only the lightweight rebuild data (meta + line items), NOT the
+    // fully-rendered page HTML. The old version stored pageHtml verbatim —
+    // which embeds the ~8KB logo and ~46KB signature stamp as base64 images
+    // on every single PO/Invoice — so the combined localStorage blob
+    // (scpoPageHtmlStore_v1, one key holding ALL POs) blew past the
+    // browser's ~5-10MB quota after roughly 80-100 documents. That write
+    // then threw silently (see saveScpoStoreLocal's catch), so every PO
+    // generated after quota was hit never got its reprintable layout
+    // persisted — reproducing exactly the "print layout missing" bug.
+    // Rebuilding via buildSubcontractPOPage() at reprint time (see
+    // reprintScPo below) needs only poNo/meta/items, which is a few hundred
+    // bytes instead of 50KB+, so the quota is no longer a practical limit.
+    window.__scpoStore[rec.poNo] = { meta: meta, items: items };
     saveScpoStoreLocal();
     renderSubcontractRegister();
 
@@ -10158,21 +10185,49 @@ function exportSOAPDF() {
     } catch(e){}
   };
 
+  function openScpoPrintWindow(poNo, isInvoice, poDate, pageHtml){
+    var docLabel = isInvoice ? formatSubconInvoiceNo(poNo, poDate) : ('MPT-SC-PO-'+poNo);
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'+
+      '<title>'+(isInvoice?'Invoice':'Subcontract PO')+' '+docLabel+'</title>'+
+      (typeof getPrintCSS==='function'?getPrintCSS():'')+
+      '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},400);});<\/script>'+
+      '</head><body>'+pageHtml+'</body></html>';
+    var w = window.open('','_blank','width=950,height=750');
+    if (!w){ alert('Allow pop-ups to reprint.'); return false; }
+    w.document.write(html); w.document.close(); return true;
+  }
+
   window.reprintScPo = function(poNo){
     var d = window.__scpoStore[poNo];
+
+    // New (lightweight) cache format: rebuild the page on demand from the
+    // saved meta + line items — this is what fixes the storage-quota bug,
+    // since nothing here duplicates the ~54KB of embedded logo/stamp image
+    // data per PO the way the old pageHtml cache did.
+    if (d && d.meta && d.items){
+      var isInvoice = d.meta.templateType === 'mptmfg_invoice';
+      var pageHtml = '';
+      try {
+        if (typeof buildSubcontractPOPage === 'function'){
+          pageHtml = buildSubcontractPOPage(poNo, d.meta.poDate, d.meta.deliveryTerms, d.meta.vendorName,
+            d.meta.vendorAddress, d.meta.vendorAttn, d.meta.remarks, d.items, d.meta.templateType, d.meta.poRef);
+          if (!isInvoice && typeof buildSubconWorkOrderSummaryPage === 'function'){
+            pageHtml += buildSubconWorkOrderSummaryPage(poNo, d.meta.poDate, d.items);
+          }
+        }
+      } catch(e){ console.error('SCPO reprint rebuild failed:', e); }
+      if (pageHtml && openScpoPrintWindow(poNo, isInvoice, d.meta.poDate, pageHtml)) return;
+    }
+
+    // Backward-compat: entries cached before this fix (or a failed rebuild
+    // above) may still hold the old full-page-HTML shape — use it as-is
+    // rather than losing the reprint entirely.
     if (d && d.pageHtml){
       var srcRec = window.subcontractRegister.filter(function(r){ return r.poNo===poNo; })[0];
-      var isInvoice = srcRec && srcRec.entity === 'mptmfg';
-      var docLabel = isInvoice ? formatSubconInvoiceNo(poNo, srcRec && srcRec.poDate) : ('MPT-SC-PO-'+poNo);
-      var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'+
-        '<title>'+(isInvoice?'Invoice':'Subcontract PO')+' '+docLabel+'</title>'+
-        (typeof getPrintCSS==='function'?getPrintCSS():'')+
-        '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},400);});<\/script>'+
-        '</head><body>'+d.pageHtml+'</body></html>';
-      var w = window.open('','_blank','width=950,height=750');
-      if (!w){ alert('Allow pop-ups to reprint.'); return; }
-      w.document.write(html); w.document.close(); return;
+      var isInvoiceOld = srcRec && srcRec.entity === 'mptmfg';
+      if (openScpoPrintWindow(poNo, isInvoiceOld, srcRec && srcRec.poDate, d.pageHtml)) return;
     }
+
     var rec = window.subcontractRegister.filter(function(r){ return r.poNo===poNo; })[0];
     if (rec && rec.fileUrl){ window.open(rec.fileUrl,'_blank'); return; }
     alert('No reprint source for MPT/SC-PO/'+poNo+'.');
