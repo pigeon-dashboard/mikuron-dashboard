@@ -342,6 +342,71 @@
     .summary-cards { grid-template-columns: 1fr 1fr; }
     .summary-card .num { font-size: 17px; }
   }
+
+  /* ---------- Refreshed dashboard theme and readable type ---------- */
+  :root {
+    --primary:#1d4ed8; --primary-dark:#1e40af; --bg:#f3f6fb; --card:#ffffff;
+    --text:#172033; --muted:#5f6f86; --border:#dce4ef;
+    --success:#16845b; --warning:#b96b08; --danger:#c93636; --info:#087e9c;
+  }
+  body { font-size:15px; line-height:1.5; background:#f3f6fb; color:#172033; }
+  .topbar { padding:16px 28px; background:rgba(255,255,255,.96); box-shadow:0 3px 14px rgba(23,32,51,.06); }
+  .topbar .brand { font-size:19px; letter-spacing:-.02em; }
+  .container { max-width:1560px; padding:30px 32px; }
+  .page-title { font-size:30px; line-height:1.2; font-weight:750; letter-spacing:-.035em; color:#15213a; }
+  .page-subtitle { font-size:15px; line-height:1.55; margin-bottom:22px; }
+  .sync-bar { min-height:54px; border-radius:12px; box-shadow:0 3px 12px rgba(23,32,51,.045); font-size:14px; }
+  .refresh-btn,.toolbar-btn,.export-btn { min-height:42px; padding:9px 15px; border-radius:9px; font-size:14px; }
+  .toolbar input,.toolbar select,.inv-config input,.inv-config select { min-height:44px; font-size:15px; border-color:#cbd5e1; }
+  .toolbar input:focus,.toolbar select:focus,.inv-config input:focus,.inv-config select:focus,
+  #vendorFilterPanel input:focus,#vendorFilterPanel select:focus { outline:3px solid rgba(37,99,235,.14); border-color:#3b82f6; }
+  .tabs { gap:6px; padding:6px; border:1px solid #e1e8f2; border-radius:13px; background:#fff; box-shadow:0 4px 14px rgba(23,32,51,.05); }
+  .tab-btn { margin:0; padding:11px 15px; border:0; border-radius:9px; font-size:14px; color:#596981; transition:background .15s,color .15s,box-shadow .15s; }
+  .tab-btn:hover { color:#1d4ed8; background:#eff6ff; }
+  .tab-btn.active { color:#fff; background:#1d4ed8; border:0; box-shadow:0 3px 8px rgba(29,78,216,.2); }
+  .summary-card,.chart-section,.po-group,.subcon-group,.inv-group,.out-group { border-color:#dce4ef; border-radius:13px; box-shadow:0 4px 14px rgba(23,32,51,.045); }
+  .summary-card { padding:19px; }
+  .summary-card .num { font-size:29px; line-height:1.2; letter-spacing:-.025em; }
+  .summary-card .label { font-size:14px; line-height:1.4; margin-top:5px; }
+  .chart-section { padding:21px; }
+  .chart-title { font-size:16px; }
+  .chart-legend { font-size:14px; }
+  .po-group-header { padding:17px 19px; }
+  .po-number { font-size:17px; }
+  .po-customer { font-size:14px; }
+  .po-meta { font-size:14px; gap:15px; }
+  .po-items-table thead th,.subcon-table thead th,#regTable thead th { font-size:13px; padding:12px 14px; }
+  .po-items-table tbody td,.subcon-table tbody td,#regTable tbody td,#regTable tfoot td,
+  .tab-panel table:not(.po-items-table):not(.subcon-table):not(#regTable) tbody td { font-size:15px !important; line-height:1.45; }
+  .po-items-table tbody td,.subcon-table tbody td,#regTable tbody td { padding:12px 14px; }
+  #vendorTable thead th { font-size:14px !important; padding:13px 14px !important; }
+  #vendorTable tbody td { font-size:15px !important; padding:14px !important; }
+  #vendorTable tbody tr:hover,#regTable tbody tr:hover { background:#f3f7fc; }
+  #vendorFilterPanel { border-radius:12px !important; }
+  #vendorFilterPanel label { font-size:13px !important; }
+  #vendorFilterPanel input,#vendorFilterPanel select { min-height:42px; font-size:14px !important; }
+  .badge { font-size:12px; padding:5px 10px; }
+  .inv-group-title,.out-group-title,.subcon-group-title { font-size:16px; }
+  .inv-group-meta,.out-group-meta,.subcon-group-meta { font-size:14px; }
+  .inv-item-row,.inv-po-subheader,.assign-inv-row .inv-meta { font-size:14px; }
+  .inv-item-desc { font-size:13px; }
+  .inv-item-pr { font-size:12px; }
+  .do-queue-card .card-date { font-size:13px; }
+  .do-queue-card .card-assign-btn,.upload-do-btn { font-size:13px; padding:7px 10px; }
+  .reg-pdf-link { font-size:14px; }
+  .config-note { font-size:14px; }
+  .config-note code { font-size:13px; }
+  .empty-state { font-size:16px; }
+  @media (max-width:640px) {
+    .container { padding:18px 14px; }
+    .page-title { font-size:25px; }
+    .page-subtitle { font-size:14px; }
+    .tab-btn { padding:11px 14px; font-size:14px; }
+    .summary-card .num { font-size:23px; }
+    .summary-card .label { font-size:13px; }
+    .po-meta { font-size:14px; }
+    #vendorTable tbody td { font-size:15px !important; }
+  }
 </style>
 </head>
 <body>
@@ -2347,19 +2412,14 @@ function renderData() {
     return;
   }
 
-  // Sort PO groups by Requested Delivery date (earliest first)
-  const parseDate = function(str) {
-    if (!str) return new Date('9999-12-31');
-    // Handle DD/MM/YYYY
-    const m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) return new Date(m[3] + '-' + m[2] + '-' + m[1]);
-    return new Date(str) || new Date('9999-12-31');
-  };
-
+  // Sort PO groups by Customer PO Number (natural A–Z / 1–9 order).
+  // Natural sorting keeps values such as PO-9 before PO-10.
   const sortedEntries = Array.from(groupsMap.entries()).sort(function(a, b) {
-    const da = parseDate(a[1][0]['Requested Delivery']);
-    const db = parseDate(b[1][0]['Requested Delivery']);
-    return da - db;
+    const poA = String(a[1][0]['Customer PO No'] || '').trim();
+    const poB = String(b[1][0]['Customer PO No'] || '').trim();
+    const poOrder = poA.localeCompare(poB, undefined, { numeric: true, sensitivity: 'base' });
+    if (poOrder !== 0) return poOrder;
+    return String(a[1][0]['Customer Name'] || '').localeCompare(String(b[1][0]['Customer Name'] || ''), undefined, { sensitivity: 'base' });
   });
 
   // Group by customer for customer subtotal header
@@ -2399,7 +2459,7 @@ function renderData() {
     const statusLabel = statuses.size === 1 ? Array.from(statuses)[0] : 'Mixed';
     const statusClass = statuses.size === 1 ? statusClassOf(statusLabel) : 'new';
 
-    const reqDelivery = first['Requested Delivery'] || '';
+    const reqDelivery = formatDateDDMMYYYY_(first['Requested Delivery']) || '';
     const incoterm = first['Incoterm'] || '';
 
     html += `
@@ -2459,7 +2519,7 @@ function renderData() {
             }
             return;
           } else {
-            value = r[col] || '-';
+            value = /date|delivery|\betd\b/i.test(col) ? (formatDateDDMMYYYY_(r[col]) || '-') : (r[col] || '-');
           }
           const safeValue = String(value);
           const cls = 'expandable' + (isExpandedCell ? ' expanded' : '');
@@ -2847,7 +2907,7 @@ function renderSubcon() {
           case 'totalMYR': value = 'RM ' + r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1}); break;
           case 'status': value = `<span class="badge onhold">${r.status}</span>`; break;
           case 'qty': value = r.qty.toLocaleString(); break;
-          default: value = r[col] || '-';
+          default: value = /date|\betd\b/i.test(col) ? (formatDateDDMMYYYY_(r[col]) || '-') : (r[col] || '-');
         }
         if (col === 'internalCode' || col === 'status') {
           html += `<td>${value}</td>`;
@@ -2961,7 +3021,7 @@ function refreshSubconPoRefOptions() {
     .sort(function(a, b) { return String(b.poNo).localeCompare(String(a.poNo), undefined, {numeric: true}); });
   const opts = ['<option value="">— No PO Ref —</option>'].concat(poRecords.map(function(r) {
     return '<option value="' + escapeHtml(r.poNo) + '" data-vendor="' + escapeHtml((r.vendorName || '').trim().toLowerCase()) + '">' +
-      'MPT/SC-PO/' + escapeHtml(r.poNo) + ' — ' + escapeHtml(r.vendorName || '—') + ' (' + escapeHtml(r.poDate || '') + ')' +
+      'MPT/SC-PO/' + escapeHtml(r.poNo) + ' — ' + escapeHtml(r.vendorName || '—') + ' (' + escapeHtml(formatDateDDMMYYYY_(r.poDate) || r.poDate || '') + ')' +
       '</option>';
   }));
   sel.innerHTML = opts.join('');
@@ -3131,7 +3191,7 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
       <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">${r.qty.toLocaleString()}</td>
       <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.unitCostMYR.toFixed(1)}</td>
       <td style="padding:5px 6px;border:1px solid #d1d5db;text-align:right;white-space:nowrap;">RM ${r.totalMYR.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
-      <td style="padding:5px 6px;border:1px solid #d1d5db;white-space:nowrap;">${escapeHtml(r.requestedDelivery || '—')}</td>
+      <td style="padding:5px 6px;border:1px solid #d1d5db;white-space:nowrap;">${escapeHtml(formatDateDDMMYYYY_(r.requestedDelivery) || '—')}</td>
     </tr>`;
   }).join('');
 
@@ -3164,7 +3224,7 @@ function buildSubcontractPOPage(poNo, poDate, deliveryTerms, vendorName, vendorA
         ${tpl === 'mptmfg_invoice'
           ? `<tr><td>Invoice No:</td><td>${formatSubconInvoiceNo(poNo, poDate)}</td></tr>`
           : `<tr><td>PO No:</td><td>MPT/SC-PO/${poNo}</td></tr>`}
-        <tr><td>${tpl === 'mptmfg_invoice' ? 'Invoice Date:' : 'PO Date:'}</td><td>${escapeHtml(poDate)}</td></tr>
+        <tr><td>${tpl === 'mptmfg_invoice' ? 'Invoice Date:' : 'PO Date:'}</td><td>${escapeHtml(formatDateDDMMYYYY_(poDate) || poDate)}</td></tr>
         ${tpl === 'mptmfg_invoice' ? `<tr><td>PO Ref:</td><td>${poRef ? 'MPT/SC-PO/' + escapeHtml(poRef) : '—'}</td></tr>` : ''}
         ${deliveryTerms ? `<tr><td>Delivery Terms:</td><td>${escapeHtml(deliveryTerms)}</td></tr>` : ''}
       </table>
@@ -3255,7 +3315,7 @@ function buildSubconWorkOrderSummaryPage(poNo, poDate, items) {
   </div>
 
   <div style="margin-bottom:12px;font-size:12px;">
-    <b>Ref PO:</b> MPT/SC-PO/${escapeHtml(poNo)} &nbsp;|&nbsp; <b>Date:</b> ${escapeHtml(poDate)}
+    <b>Ref PO:</b> MPT/SC-PO/${escapeHtml(poNo)} &nbsp;|&nbsp; <b>Date:</b> ${escapeHtml(formatDateDDMMYYYY_(poDate) || poDate)}
   </div>
 
   <table class="items-table">
@@ -3315,7 +3375,7 @@ function generateSubcontractPOPDF() {
     }
     const docLabel = templateType === 'mptmfg_invoice' ? formatSubconInvoiceNo(poNo, poDate) : ('MPT-SC-PO-' + poNo);
     const combinedHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>${templateType === 'mptmfg_invoice' ? 'Invoice' : 'Subcontract PO'} ${docLabel} — ${new Date().toLocaleDateString('en-GB')}</title>
+<title>${templateType === 'mptmfg_invoice' ? 'Invoice' : 'Subcontract PO'} ${docLabel} — ${formatDateDDMMYYYY_(new Date())}</title>
 ${getPrintCSS()}
 <script>
   document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
@@ -3486,7 +3546,7 @@ function exportSalesToPPTX() {
       s.addText(`+ ${items.length - 8} more line item(s) not shown`, { x: 0.6, y: 1.5 + 0.4*9, w: 12, h: 0.4, fontSize: 11, italic: true, color: MUTED, fontFace: 'Calibri' });
     }
 
-    s.addText(`Requested Delivery: ${first['Requested Delivery'] || '-'}   |   Incoterm: ${first['Incoterm'] || '-'}   |   Total Qty: ${poQty.toLocaleString()}`, {
+    s.addText(`Requested Delivery: ${formatDateDDMMYYYY_(first['Requested Delivery']) || '-'}   |   Incoterm: ${first['Incoterm'] || '-'}   |   Total Qty: ${poQty.toLocaleString()}`, {
       x: 0.6, y: 6.7, w: 12, h: 0.4, fontSize: 12, color: MUTED, fontFace: 'Calibri'
     });
   });
@@ -3800,8 +3860,10 @@ function renderInvoiceTab() {
       var poNo      = rowVal(first,'Customer PO No');
       var custNm    = rowVal(first,'Customer Name');
       var prNo      = rowVal(first,'PR No');
-      var deliv     = rowVal(first,'Requested Delivery');
-      var issued    = rowVal(first,'PO Issue Date');
+      var delivRaw  = rowVal(first,'Requested Delivery');
+      var issuedRaw = rowVal(first,'PO Issue Date');
+      var deliv     = formatDateDDMMYYYY_(delivRaw) || delivRaw;
+      var issued    = formatDateDDMMYYYY_(issuedRaw) || issuedRaw;
       var poTotal   = rows.reduce(function(s,r){return s+(parseFloat(rowVal(r,'Total Price'))||0);},0);
       var selCount  = rows.filter(function(r){return invSelectedItems.has(key+'||'+r.__globalIdx);}).length;
       var allSel    = selCount===rows.length;
@@ -5052,7 +5114,7 @@ ${printType !== 'do' ? `
     <div class="info-right">
       <table>
         <tr><td>INV NO.</td><td><b>MPT/INV/${d.inv_no}</b></td></tr>
-        <tr><td>DATE</td><td>${d.date}</td></tr>
+        <tr><td>DATE</td><td>${formatDateDDMMYYYY_(d.date) || d.date}</td></tr>
         <tr><td>TERMS</td><td>${d.terms}</td></tr>
         <tr><td>PO Ref</td><td>${d.po_ref}</td></tr>
         ${d.pr_ref ? `<tr><td>PR No</td><td><b>${d.pr_ref}</b></td></tr>` : ''}
@@ -5124,7 +5186,7 @@ ${printType !== 'invoice' ? `
     <div class="info-right">
       <table>
         <tr><td>DO NO.</td><td><b>MPT/DO/${d.inv_no}</b></td></tr>
-        <tr><td>DATE</td><td>${d.date}</td></tr>
+        <tr><td>DATE</td><td>${formatDateDDMMYYYY_(d.date) || d.date}</td></tr>
         <tr><td>PO Ref</td><td>${d.po_ref}</td></tr>
         ${d.pr_ref ? `<tr><td>PR No</td><td><b>${d.pr_ref}</b></td></tr>` : ''}
         <tr><td>INV No</td><td>MPT/INV/${d.inv_no}</td></tr>
@@ -5170,7 +5232,7 @@ ${printType !== 'invoice' ? `
     <div class="info-right">
       <table>
         <tr><td>DO NO.</td><td><b>MPT/DO/${d.inv_no}</b></td></tr>
-        <tr><td>DATE</td><td>${d.date}</td></tr>
+        <tr><td>DATE</td><td>${formatDateDDMMYYYY_(d.date) || d.date}</td></tr>
         <tr><td>PO Ref</td><td>${d.po_ref}</td></tr>
         ${d.pr_ref ? `<tr><td>PR No</td><td><b>${d.pr_ref}</b></td></tr>` : ''}
       </table>
@@ -5189,7 +5251,7 @@ ${printType !== 'invoice' ? `
 // All invoices flow as continuous pages — one print dialog, no popups
 function buildCombinedPrintHTML(allPagesHTML, firstData) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Mikuron Invoices — ${new Date().toLocaleDateString('en-GB')}</title>
+<title>Mikuron Invoices — ${formatDateDDMMYYYY_(new Date())}</title>
 ${getPrintCSS()}
 <script>
   document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
@@ -5228,7 +5290,7 @@ function updateOutstandingBadge() {
   const badge = document.getElementById('outstandingBadge');
   if (badge) badge.textContent = outstandingPOs > 0 ? outstandingPOs + ' POs' : '';
   document.getElementById('outstandingAsOf').textContent =
-    outstandingPOs > 0 ? `As of ${new Date().toLocaleDateString('en-GB')} · ${outstandingPOs} open POs` : 'All deliveries up to date ✓';
+    outstandingPOs > 0 ? `As of ${formatDateDDMMYYYY_(new Date())} · ${outstandingPOs} open POs` : 'All deliveries up to date ✓';
 }
 
 function renderOutstandingTab() {
@@ -5692,8 +5754,8 @@ function populateVendorFilterDropdowns() {
   if (yearSel) {
     const years = new Set();
     vendorInvoices.forEach(function(r) {
-      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
-      if (m) years.add(m[1]);
+      const p = vendorDateParts_(r.invoiceDate);
+      if (p) years.add(String(p.year));
     });
     const sortedYears = Array.from(years).sort().reverse();
     const prevVal = yearSel.value;
@@ -5751,6 +5813,44 @@ function invKey_(vendorName, invoiceNo) {
   return (vendorName || '').trim().toLowerCase() + '||' + (invoiceNo || '').trim().toLowerCase();
 }
 
+// Parse vendor dates from common Sheet and OCR formats without relying on the
+// browser's locale. Slash-form dates are interpreted as DD/MM/YYYY.
+function vendorDateParts_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return { year: value.getFullYear(), month: value.getMonth() + 1, day: value.getDate() };
+  }
+  const s = String(value == null ? '' : value).trim();
+  if (!s) return null;
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s].*)?$/);
+  if (m) return validVendorDateParts_(+m[1], +m[2], +m[3]);
+  m = s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})(?:[T\s].*)?$/);
+  if (m) return validVendorDateParts_(+m[3], +m[2], +m[1]);
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) return { year: parsed.getFullYear(), month: parsed.getMonth() + 1, day: parsed.getDate() };
+  return null;
+}
+
+function validVendorDateParts_(year, month, day) {
+  const d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return { year: year, month: month, day: day };
+}
+
+function vendorDateISO_(value) {
+  const p = vendorDateParts_(value);
+  return p ? String(p.year).padStart(4, '0') + '-' + String(p.month).padStart(2, '0') + '-' + String(p.day).padStart(2, '0') : '';
+}
+
+function formatVendorDate_(value) {
+  const p = vendorDateParts_(value);
+  return p ? String(p.day).padStart(2, '0') + '/' + String(p.month).padStart(2, '0') + '/' + String(p.year).padStart(4, '0') : '';
+}
+
+// Shared display formatter for dates shown throughout every dashboard tab.
+function formatDateDDMMYYYY_(value) {
+  return formatVendorDate_(value);
+}
+
 function toggleVendorInvoiceSelect(key, checked) {
   if (checked) vendorPaymentSelection.add(key);
   else vendorPaymentSelection.delete(key);
@@ -5804,21 +5904,16 @@ function renderVendorInvoiceTab() {
   const dueDateTo     = (document.getElementById('vendorDueDateTo') || {value:''}).value;
   const search        = ((document.getElementById('vendorSearch') || {value:''}).value || '').toLowerCase();
 
-  function ddmmyyyyToISO(s) {
-    const m = (s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    return m ? (m[3] + '-' + m[2] + '-' + m[1]) : '';
-  }
-
   let rows = vendorInvoices.filter(function(r) {
     if (yearFilter) {
-      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
-      if (!m || m[1] !== yearFilter) return false;
+      const invoiceISO = vendorDateISO_(r.invoiceDate);
+      if (!invoiceISO || invoiceISO.slice(0, 4) !== yearFilter) return false;
     }
     if (statusFilter && r.status !== statusFilter) return false;
     if (vendorFilter && r.vendorName !== vendorFilter) return false;
     if (billToFilter && resolveBillingEntity(r.billToName) !== billToFilter) return false;
     if (dueDateFrom || dueDateTo) {
-      const iso = ddmmyyyyToISO(r.paymentDueDate);
+      const iso = vendorDateISO_(r.paymentDueDate);
       if (!iso) return false; // exclude undated rows when a date filter is active
       if (dueDateFrom && iso < dueDateFrom) return false;
       if (dueDateTo   && iso > dueDateTo)   return false;
@@ -5831,9 +5926,15 @@ function renderVendorInvoiceTab() {
     return true;
   });
 
-  // Newest first
+  // Newest invoice date first; invoices without a usable invoice date go last.
   rows.sort(function(a, b) {
-    return (b.receivedDate || '').localeCompare(a.receivedDate || '');
+    const dateA = vendorDateISO_(a.invoiceDate);
+    const dateB = vendorDateISO_(b.invoiceDate);
+    if (dateA && dateB && dateA !== dateB) return dateB.localeCompare(dateA);
+    if (dateA && !dateB) return -1;
+    if (!dateA && dateB) return 1;
+    const invoiceOrder = String(a.invoiceNo || '').localeCompare(String(b.invoiceNo || ''), undefined, { numeric: true, sensitivity: 'base' });
+    return invoiceOrder || String(a.vendorName || '').localeCompare(String(b.vendorName || ''), undefined, { sensitivity: 'base' });
   });
 
   // Summary cards
@@ -5841,10 +5942,10 @@ function renderVendorInvoiceTab() {
   const reviewCount  = vendorInvoices.filter(function(r){ return r.status === 'Review Required'; }).length;
   const totalAmount  = vendorInvoices.reduce(function(s, r){ return s + (r.total || 0); }, 0);
   const thisMonthCount = vendorInvoices.filter(function(r) {
-    const m = (r.invoiceDate || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    if (!m) return false;
+    const p = vendorDateParts_(r.invoiceDate);
+    if (!p) return false;
     const now = new Date();
-    return parseInt(m[2]) === (now.getMonth()+1) && parseInt(m[3]) === now.getFullYear();
+    return p.month === (now.getMonth()+1) && p.year === now.getFullYear();
   }).length;
 
   summaryEl.innerHTML =
@@ -5891,8 +5992,8 @@ function renderVendorInvoiceTab() {
         escapeHtml(r.vendorName || '—') + billToBadgeHtml +
       '</td>' +
       '<td style="padding:10px 12px;">' + escapeHtml(r.invoiceNo || '—') + '</td>' +
-      '<td style="padding:10px 12px;">' + escapeHtml(r.invoiceDate || '—') + '</td>' +
-      '<td style="padding:10px 12px;">' + escapeHtml(r.paymentDueDate || '—') + '</td>' +
+      '<td style="padding:10px 12px;white-space:nowrap;">' + escapeHtml(formatVendorDate_(r.invoiceDate) || '—') + '</td>' +
+      '<td style="padding:10px 12px;white-space:nowrap;">' + escapeHtml(formatVendorDate_(r.paymentDueDate) || '—') + '</td>' +
       '<td style="padding:10px 12px;text-align:right;">' + escapeHtml(r.currency || 'SGD') + ' ' + (r.total || 0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) +
         (items.length ? ' <span style="color:var(--muted);font-size:11px;">(' + items.length + ' item' + (items.length !== 1 ? 's' : '') + ')</span>' : '') +
       '</td>' +
@@ -5923,7 +6024,7 @@ function renderVendorInvoiceTab() {
     const detailRow = '<tr id="' + rowId + '" style="display:' + (vendorAllExpanded ? 'table-row' : 'none') + ';background:#f8fafc;">' +
       '<td colspan="8" style="padding:0 12px 12px 36px;">' +
         '<div style="font-size:11px;color:var(--muted);margin:6px 0 4px;">' +
-          (r.deliveryDate ? 'Delivery Date: <b>' + escapeHtml(r.deliveryDate) + '</b> &nbsp;·&nbsp; ' : '') +
+          (r.deliveryDate ? 'Delivery Date: <b>' + escapeHtml(formatDateDDMMYYYY_(r.deliveryDate) || r.deliveryDate) + '</b> &nbsp;·&nbsp; ' : '') +
           (r.creditTerm ? 'Credit Term: <b>' + escapeHtml(r.creditTerm) + '</b>' : '') +
         '</div>' +
         (r.billToName || r.billToAddress || r.shipToName || r.shipToAddress ?
@@ -6015,8 +6116,8 @@ function getPvFilteredUnpaidInvoices() {
   return vendorInvoices.filter(function(r) {
     if (r.status === 'Paid') return false;
     if (yearFilter) {
-      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
-      if (!m || m[1] !== yearFilter) return false;
+      const iso = vendorDateISO_(r.invoiceDate);
+      if (!iso || iso.slice(0, 4) !== yearFilter) return false;
     }
     if (vendorFilter && r.vendorName !== vendorFilter) return false;
     if (billToFilter && resolveBillingEntity(r.billToName) !== billToFilter) return false;
@@ -6031,8 +6132,8 @@ function populatePvFilterDropdowns() {
   if (yearSel) {
     const years = new Set();
     unpaid.forEach(function(r) {
-      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
-      if (m) years.add(m[1]);
+      const iso = vendorDateISO_(r.invoiceDate);
+      if (iso) years.add(iso.slice(0, 4));
     });
     const sortedYears = Array.from(years).sort().reverse();
     const prevVal = yearSel.value;
@@ -6074,7 +6175,7 @@ function renderPaymentVoucherInvoiceList() {
     return;
   }
 
-  rows.sort(function(a, b) { return (b.invoiceDate || '').localeCompare(a.invoiceDate || ''); });
+  rows.sort(function(a, b) { return vendorDateISO_(b.invoiceDate).localeCompare(vendorDateISO_(a.invoiceDate)); });
 
   container.innerHTML = '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;">' +
     rows.map(function(r) {
@@ -6082,7 +6183,7 @@ function renderPaymentVoucherInvoiceList() {
       const checked = vendorPaymentSelection.has(key);
       return '<label style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--border);font-size:13px;cursor:pointer;">' +
         '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleVendorInvoiceSelect(\'' + key.replace(/'/g,"\\'") + '\', this.checked); renderPaymentVoucherTab(); updatePvSelectionUI();">' +
-        '<span style="flex:1;">' + escapeHtml(r.vendorName) + ' — ' + escapeHtml(r.invoiceNo) + ' &nbsp;·&nbsp; ' + escapeHtml(r.invoiceDate || '—') + '</span>' +
+        '<span style="flex:1;">' + escapeHtml(r.vendorName) + ' — ' + escapeHtml(r.invoiceNo) + ' &nbsp;·&nbsp; ' + escapeHtml(formatDateDDMMYYYY_(r.invoiceDate) || '—') + '</span>' +
         '<b>' + escapeHtml(r.currency || 'SGD') + ' ' + (r.total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</b>' +
       '</label>';
     }).join('') +
@@ -6175,8 +6276,8 @@ function renderPaymentVoucherTab() {
     const rowsHtml = invs.map(function(r) {
       const key = invKey_(r.vendorName, r.invoiceNo);
       return '<div style="display:flex;justify-content:space-between;padding:8px 16px;border-top:1px solid var(--border);font-size:13px;">' +
-        '<span>' + escapeHtml(r.invoiceNo || '—') + ' &nbsp;·&nbsp; ' + escapeHtml(r.invoiceDate || '—') +
-          (r.paymentDueDate ? ' &nbsp;·&nbsp; Due: ' + escapeHtml(r.paymentDueDate) : '') + '</span>' +
+        '<span>' + escapeHtml(r.invoiceNo || '—') + ' &nbsp;·&nbsp; ' + escapeHtml(formatDateDDMMYYYY_(r.invoiceDate) || '—') +
+          (r.paymentDueDate ? ' &nbsp;·&nbsp; Due: ' + escapeHtml(formatDateDDMMYYYY_(r.paymentDueDate) || '—') : '') + '</span>' +
         '<span style="display:flex;align-items:center;gap:10px;">' +
           '<b>' + escapeHtml(r.currency || 'SGD') + ' ' + (r.total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</b>' +
           '<button onclick="toggleVendorInvoiceSelect(\'' + key.replace(/'/g,"\\'") + '\', false); renderPaymentVoucherTab();" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:12px;">Remove</button>' +
@@ -6259,7 +6360,7 @@ function buildPaymentVoucherPDFPage(d) {
   const invoiceRowsHtml = d.invoices.map(function(inv) {
     return `<tr>
       <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(inv.invoiceNo || '—')}</td>
-      <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(inv.invoiceDate || '—')}</td>
+      <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(formatDateDDMMYYYY_(inv.invoiceDate) || '—')}</td>
       <td style="padding:8px;border:1px solid #ddd;text-align:right;">${escapeHtml(inv.currency||'SGD')} ${(inv.total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
     </tr>`;
   }).join('');
@@ -6283,7 +6384,7 @@ function buildPaymentVoucherPDFPage(d) {
     </div>
     <div style="text-align:right;">
       <b>PV No:</b> MPT/PV/${d.pv_no}<br>
-      <b>Date:</b> ${escapeHtml(d.date)}<br>
+      <b>Date:</b> ${escapeHtml(formatDateDDMMYYYY_(d.date) || '—')}<br>
       <b>Payment Method:</b> ${escapeHtml(d.method)}<br>
       ${d.refNo ? `<b>Reference No:</b> ${escapeHtml(d.refNo)}<br>` : ''}
       ${d.method === 'Bank Transfer' && d.bankName ? `<b>Bank:</b> ${escapeHtml(d.bankName)}<br>` : ''}
@@ -6402,7 +6503,7 @@ async function generatePaymentVoucherPDF() {
 
     const combinedBody = pvDataArr.map(function(d) { return buildPaymentVoucherPDFPage(d); }).join('\n');
     const combinedHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Payment Vouchers — ${new Date().toLocaleDateString('en-GB')}</title>
+<title>Payment Vouchers — ${formatDateDDMMYYYY_(new Date())}</title>
 ${getPrintCSS()}
 <script>
   document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
@@ -6525,7 +6626,7 @@ function renderRecentPvList() {
       '</td>' +
       '<td style="padding:8px 12px;font-weight:600;">' + escapeHtml(r.pvRef) + entityBadge + '</td>' +
       '<td style="padding:8px 12px;">' + escapeHtml(r.vendorName) + '</td>' +
-      '<td style="padding:8px 12px;">' + escapeHtml(r.date) + '</td>' +
+      '<td style="padding:8px 12px;">' + escapeHtml(formatDateDDMMYYYY_(r.date) || '—') + '</td>' +
       '<td style="padding:8px 12px;">' + escapeHtml(r.method) + '</td>' +
       '<td style="padding:8px 12px;">' + escapeHtml(r.invoiceNos) + '</td>' +
       '<td style="padding:8px 12px;text-align:right;">' + escapeHtml(r.currency||'SGD') + ' ' + (r.totalAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</td>' +
@@ -6780,7 +6881,7 @@ function renderPvListingTab() {
         escapeHtml(r.pvRef) + entityBadge +
       '</td>' +
       '<td style="padding:10px 12px;">' + escapeHtml(r.vendorName) + '</td>' +
-      '<td style="padding:10px 12px;">' + escapeHtml(r.date) + '</td>' +
+      '<td style="padding:10px 12px;">' + escapeHtml(formatDateDDMMYYYY_(r.date) || '—') + '</td>' +
       '<td style="padding:10px 12px;">' + escapeHtml(r.method) + '</td>' +
       '<td style="padding:10px 12px;">' + escapeHtml(r.invoiceNos) + '</td>' +
       '<td style="padding:10px 12px;text-align:right;">' + escapeHtml(r.currency||'SGD') + ' ' + (r.totalAmount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</td>' +
@@ -6865,8 +6966,8 @@ function populateSoaDropdowns() {
   if (yearSel) {
     const years = new Set();
     vendorInvoices.forEach(function(r) {
-      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
-      if (m) years.add(m[1]);
+      const iso = vendorDateISO_(r.invoiceDate);
+      if (iso) years.add(iso.slice(0, 4));
     });
     const sortedYears = Array.from(years).sort().reverse();
     const prevVal = yearSel.value;
@@ -6877,8 +6978,7 @@ function populateSoaDropdowns() {
 }
 
 function ddmmyyyyToSortableISO_(s) {
-  const m = (s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
-  return m ? (m[3] + '-' + m[2] + '-' + m[1]) : '0000-00-00';
+  return vendorDateISO_(s) || '0000-00-00';
 }
 
 // A credit note reduces what we owe. Detected by invoice-no prefix "CN"
@@ -7021,7 +7121,7 @@ function renderVendorSoaTab() {
     html += entityEntries.map(function(e) {
       const isPayment = e.type === 'Payment';
       return '<tr' + (isPayment ? ' style="background:#f0fdf4"' : '') + '>' +
-        '<td style="padding:8px 12px;">' + escapeHtml(e.date) + '</td>' +
+        '<td style="padding:8px 12px;">' + escapeHtml(formatDateDDMMYYYY_(e.date) || '—') + '</td>' +
         '<td style="padding:8px 12px;">' +
           '<span class="badge" style="background:' + (isPayment ? '#dcfce7;color:#15803d' : '#dbeafe;color:#1d4ed8') + ';">' + e.type + '</span>' +
         '</td>' +
@@ -7120,7 +7220,7 @@ function buildVendorSoaPrintPage(vendorName, yearFilter, ledger) {
     bodyRowsHtml += entityEntries.map(function(e) {
       const isPayment = e.type === 'Payment';
       return `<tr style="${isPayment ? 'background:#f0fdf4;' : ''}">
-        <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(e.date)}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(formatDateDDMMYYYY_(e.date) || '—')}</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(e.type)}</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(e.reference)}</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${e.debit ? e.debit.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</td>
@@ -7159,7 +7259,7 @@ function buildVendorSoaPrintPage(vendorName, yearFilter, ledger) {
     </div>
     <div style="text-align:right;">
       <b>Period:</b> ${yearFilter ? escapeHtml(yearFilter) : 'All dates'}<br>
-      <b>Statement Date:</b> ${new Date().toLocaleDateString('en-GB')}
+      <b>Statement Date:</b> ${formatDateDDMMYYYY_(new Date())}
     </div>
   </div>
 
@@ -7201,7 +7301,7 @@ function printVendorSoaPDF() {
 
   const pageHtml = buildVendorSoaPrintPage(vendorName, yearFilter, ledger);
   const combinedHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>SOA ${vendorName} — ${new Date().toLocaleDateString('en-GB')}</title>
+<title>SOA ${vendorName} — ${formatDateDDMMYYYY_(new Date())}</title>
 ${getPrintCSS()}
 <script>
   document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
@@ -7224,8 +7324,8 @@ function populateSoaArchiveFilters() {
   if (yearSel) {
     const years = new Set();
     vendorInvoices.forEach(function(r) {
-      const m = (r.invoiceDate || '').match(/\d{2}\/\d{2}\/(\d{4})/);
-      if (m) years.add(m[1]);
+      const iso = vendorDateISO_(r.invoiceDate);
+      if (iso) years.add(iso.slice(0, 4));
     });
     const sortedYears = Array.from(years).sort().reverse();
     const prevVal = yearSel.value;
@@ -7257,11 +7357,11 @@ function buildSoaArchiveIndex(yearFilter, vendorFilter) {
 
   vendorInvoices.forEach(function(r) {
     if (vendorFilter && r.vendorName !== vendorFilter) return;
-    const m = (r.invoiceDate || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    if (!m) return;
-    if (yearFilter && m[3] !== yearFilter) return;
-    const monthKey = m[3] + '-' + m[2];
-    const monthLabel = new Date(parseInt(m[3]), parseInt(m[2])-1, 1).toLocaleDateString('en-GB', { year: 'numeric', month: 'long' });
+    const iso = vendorDateISO_(r.invoiceDate);
+    if (!iso) return;
+    if (yearFilter && iso.slice(0, 4) !== yearFilter) return;
+    const monthKey = iso.slice(0, 7);
+    const monthLabel = new Date(Number(iso.slice(0,4)), Number(iso.slice(5,7))-1, 1).toLocaleDateString('en-GB', { year: 'numeric', month: 'long' });
 
     if (!index[r.vendorName]) index[r.vendorName] = {};
     if (!index[r.vendorName][monthKey]) index[r.vendorName][monthKey] = { invoiced: 0, paid: 0, count: 0, monthLabel: monthLabel, currency: r.currency || 'SGD' };
@@ -7283,10 +7383,10 @@ function buildSoaArchiveIndex(yearFilter, vendorFilter) {
       // Split the PV's total evenly across the months of the invoices it covers
       const amountPerInvoice = (pv.totalAmount || 0) / coveredInvoices.length;
       coveredInvoices.forEach(function(r) {
-        const m = (r.invoiceDate || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
-        if (!m) return;
-        if (yearFilter && m[3] !== yearFilter) return;
-        const monthKey = m[3] + '-' + m[2];
+        const iso = vendorDateISO_(r.invoiceDate);
+        if (!iso) return;
+        if (yearFilter && iso.slice(0, 4) !== yearFilter) return;
+        const monthKey = iso.slice(0, 7);
         if (index[pv.vendorName] && index[pv.vendorName][monthKey]) {
           index[pv.vendorName][monthKey].paid += amountPerInvoice;
         }
@@ -7479,7 +7579,7 @@ function calcDueDateJS(dateStr, terms) {
   if (isNaN(d.getTime())) return '';
   const days = parseInt((terms || '30').replace(/[^0-9]/g, '')) || 30;
   d.setDate(d.getDate() + days);
-  return d.toLocaleDateString('en-GB');
+  return formatDateDDMMYYYY_(d);
 }
 
 function isOverdue(dueDateStr) {
@@ -7596,8 +7696,8 @@ function renderInvoiceRegister() {
     html += '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis" title="' + (r.custName||'').replace(/"/g,'') + '">' + (r.custName||'-') + '</td>';
     html += '<td>' + (r.custPO||'-') + '</td>';
     html += '<td>' + (r.prRef||'-') + '</td>';
-    html += '<td style="white-space:nowrap">' + (r.date||'-') + '</td>';
-    html += '<td style="white-space:nowrap;color:' + (ov?'#dc2626':'inherit') + ';font-weight:' + (ov?'700':'400') + '">' + (r.dueDate||'-') + '</td>';
+    html += '<td style="white-space:nowrap">' + (formatDateDDMMYYYY_(r.date)||'-') + '</td>';
+    html += '<td style="white-space:nowrap;color:' + (ov?'#dc2626':'inherit') + ';font-weight:' + (ov?'700':'400') + '">' + (formatDateDDMMYYYY_(r.dueDate)||'-') + '</td>';
     html += '<td>' + (r.terms||'-') + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(r.subtotal||0) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(r.gst||0) + '</td>';
@@ -8119,7 +8219,7 @@ function renderDOQueue() {
     return '<div class="do-queue-card" onclick="openDOModal(\'' + item.fileId + '\')">' +
       thumb +
       '<div class="card-name" title="' + (item.fileName||'') + '">' + (item.fileName||'scan') + '</div>' +
-      '<div class="card-date">' + (item.scanDate||'') + '</div>' +
+      '<div class="card-date">' + (formatDateDDMMYYYY_(item.scanDate)||item.scanDate||'') + '</div>' +
       detectedHtml +
       '<button class="card-assign-btn" onclick="event.stopPropagation();openDOModal(\'' + item.fileId + '\')">📋 Assign to Invoice</button>' +
       '</div>';
@@ -8141,7 +8241,7 @@ function openDOModal(fileId) {
     : '<div style="font-size:60px;margin:10px 0">🖼</div><div style="font-size:12px;color:#6b7280">Image Scan</div>';
 
   document.getElementById('doModalFileName').textContent = item.fileName || 'scan';
-  document.getElementById('doModalDate').textContent     = 'Received: ' + (item.scanDate || '') + '  ·  From: ' + (item.from || '');
+  document.getElementById('doModalDate').textContent     = 'Received: ' + (formatDateDDMMYYYY_(item.scanDate) || item.scanDate || '') + '  ·  From: ' + (item.from || '');
   const link = document.getElementById('doModalViewLink');
   if (link) { link.href = item.fileUrl || '#'; }
 
@@ -8162,7 +8262,7 @@ function openDOModal(fileId) {
         return '<div style="color:#374151;padding:2px 0;">• ' +
           (d.doNo ? '<b>DO ' + escapeHtml(d.doNo) + '</b>' : '<b>DO #?</b>') +
           (d.custName ? ' — ' + escapeHtml(d.custName) : ' — (customer not legible)') +
-          (d.deliveryDate ? ' · ' + escapeHtml(d.deliveryDate) : '') +
+          (d.deliveryDate ? ' · ' + escapeHtml(formatDateDDMMYYYY_(d.deliveryDate) || d.deliveryDate) : '') +
           (d.hasSignature ? ' · ✓ signed' : ' · ⚠ no signature seen') +
         '</div>';
       }).join('');
@@ -8207,7 +8307,7 @@ function renderAssignList(items, search) {
       '<div class="inv-num">MPT/INV/' + r.invNo + '</div>' +
       '<div class="inv-meta">' +
         '<div style="font-weight:600;color:#374151">' + (r.custName||'-') + '</div>' +
-        '<div>PO: ' + (r.custPO||'-') + '  ·  ' + (r.date||'-') +
+      '<div>PO: ' + (r.custPO||'-') + '  ·  ' + (formatDateDDMMYYYY_(r.date)||'-') +
           (ov ? '  <span style="color:#dc2626;font-weight:700">OVERDUE</span>' : '') +
         '</div>' +
         '<div style="font-weight:700;color:#065f46">' + fmtMoney(r.total||0) + '</div>' +
@@ -8432,7 +8532,7 @@ function exportSOAPDF() {
   if (rows.length === 0) { alert('No invoices found for ' + custFilter); return; }
 
   const now = new Date();
-  const asOfDate = now.toLocaleDateString('en-GB');
+  const asOfDate = formatDateDDMMYYYY_(now);
   const totalOutstanding = rows.filter(r => r.status !== 'Paid').reduce((s,r) => s+r.total, 0);
   const totalPaid = rows.filter(r => r.status === 'Paid').reduce((s,r) => s+r.total, 0);
 
@@ -8484,8 +8584,8 @@ function exportSOAPDF() {
     return `<tr style="background:${rowBg}">
       <td>MPT/INV/${r.invNo}${doMark}</td>
       <td>${r.custPO||'-'}</td><td>${r.prRef||'-'}</td>
-      <td>${r.date}</td>
-      <td style="color:${ov?'#dc2626':'inherit'};font-weight:${ov?'700':'400'}">${r.dueDate||'-'}</td>
+      <td>${formatDateDDMMYYYY_(r.date)||'-'}</td>
+      <td style="color:${ov?'#dc2626':'inherit'};font-weight:${ov?'700':'400'}">${formatDateDDMMYYYY_(r.dueDate)||'-'}</td>
       <td>${r.terms}</td>
       <td style="text-align:right">${fmtMoney(r.subtotal)}</td>
       <td style="text-align:right">${fmtMoney(r.gst)}</td>
@@ -8525,7 +8625,7 @@ function exportSOAPDF() {
   ].filter(b => b.items.length > 0).map(b => `
     <div style="margin:4px 0;font-size:10px;color:${b.color}">
       <b>${b.label}:</b>
-      ${b.items.map(r => `MPT/INV/${r.invNo} (${fmtMoney(r.total)} due ${r.dueDate||'-'})`).join(' &nbsp;·&nbsp; ')}
+      ${b.items.map(r => `MPT/INV/${r.invNo} (${fmtMoney(r.total)} due ${formatDateDDMMYYYY_(r.dueDate)||'-'})`).join(' &nbsp;·&nbsp; ')}
     </div>`).join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -9699,7 +9799,7 @@ function exportSOAPDF() {
         '<td style="padding:7px 8px;text-align:center;"><input type="checkbox" data-no="'+esc(no)+'" '+has+' onchange="__eiToggle(this)"></td>' +
         '<td style="padding:7px 8px;font-weight:600;">MPT/INV/'+esc(no)+'</td>' +
         '<td style="padding:7px 8px;">'+esc(gCust(r))+'</td>' +
-        '<td style="padding:7px 8px;">'+esc(gDate(r))+'</td>' +
+        '<td style="padding:7px 8px;">'+esc(formatDateDDMMYYYY_(gDate(r)) || gDate(r))+'</td>' +
         '<td style="padding:7px 8px;text-align:right;">'+money(gTotal(r))+'</td>' +
         '<td style="padding:7px 8px;text-align:center;">'+invOk+'</td>' +
         '<td style="padding:7px 8px;text-align:center;">'+doOk+'</td>' +
@@ -10158,7 +10258,7 @@ function exportSOAPDF() {
         ? '<div style="font-size:10.5px;color:#64748b;font-weight:400;">Ref: MPT/SC-PO/'+esc(r.poRef)+'</div>' : '';
       return '<tr style="border-bottom:1px solid #eef2f7;">'+
         '<td style="padding:8px 12px;font-weight:600;">'+docNo+entityBadge+poRefLine+'</td>'+
-        '<td style="padding:8px 12px;">'+esc(r.poDate||'-')+'</td>'+
+        '<td style="padding:8px 12px;">'+esc(formatDateDDMMYYYY_(r.poDate)||'-')+'</td>'+
         '<td style="padding:8px 12px;">'+esc(r.vendorName||'-')+'</td>'+
         '<td style="padding:8px 12px;text-align:right;">'+rm(r.total)+'</td>'+
         '<td style="padding:8px 12px;text-align:center;"><span class="badge '+(r.status==='Cancelled'?'onhold':'shipped')+'">'+esc(r.status||'Active')+'</span></td>'+
