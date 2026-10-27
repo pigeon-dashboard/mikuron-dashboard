@@ -5824,9 +5824,19 @@ function dateParts_(value, slashOrder) {
   let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s].*)?$/);
   if (m) return validVendorDateParts_(+m[1], +m[2], +m[3]);
   m = s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})(?:[T\s].*)?$/);
-  if (m) return slashOrder === 'mdy'
-    ? validVendorDateParts_(+m[3], +m[1], +m[2])
-    : validVendorDateParts_(+m[3], +m[2], +m[1]);
+  if (m) {
+    const first = +m[1], second = +m[2], year = +m[3];
+    // Resolve clear cases automatically. If both parts could be months,
+    // default to Singapore's DD/MM/YYYY convention.
+    if (slashOrder === 'auto') {
+      if (first > 12 && second <= 12) return validVendorDateParts_(year, second, first);
+      if (second > 12 && first <= 12) return validVendorDateParts_(year, first, second);
+      return validVendorDateParts_(year, second, first);
+    }
+    return slashOrder === 'mdy'
+      ? validVendorDateParts_(year, first, second)
+      : validVendorDateParts_(year, second, first);
+  }
   const parsed = new Date(s);
   if (!isNaN(parsed.getTime())) return { year: parsed.getFullYear(), month: parsed.getMonth() + 1, day: parsed.getDate() };
   return null;
@@ -5838,7 +5848,7 @@ function validVendorDateParts_(year, month, day) {
   return { year: year, month: month, day: day };
 }
 
-function vendorDateParts_(value) { return dateParts_(value, 'mdy'); }
+function vendorDateParts_(value) { return dateParts_(value, 'auto'); }
 
 function vendorDateISO_(value) {
   const p = vendorDateParts_(value);
