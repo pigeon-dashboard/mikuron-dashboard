@@ -5814,8 +5814,8 @@ function invKey_(vendorName, invoiceNo) {
 }
 
 // Parse vendor dates from common Sheet and OCR formats without relying on the
-// browser's locale. Slash-form dates are interpreted as DD/MM/YYYY.
-function vendorDateParts_(value) {
+// browser locale. Vendor slash dates use MM/DD/YYYY; other tabs use DD/MM/YYYY.
+function dateParts_(value, slashOrder) {
   if (value instanceof Date && !isNaN(value.getTime())) {
     return { year: value.getFullYear(), month: value.getMonth() + 1, day: value.getDate() };
   }
@@ -5824,7 +5824,9 @@ function vendorDateParts_(value) {
   let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s].*)?$/);
   if (m) return validVendorDateParts_(+m[1], +m[2], +m[3]);
   m = s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})(?:[T\s].*)?$/);
-  if (m) return validVendorDateParts_(+m[3], +m[2], +m[1]);
+  if (m) return slashOrder === 'mdy'
+    ? validVendorDateParts_(+m[3], +m[1], +m[2])
+    : validVendorDateParts_(+m[3], +m[2], +m[1]);
   const parsed = new Date(s);
   if (!isNaN(parsed.getTime())) return { year: parsed.getFullYear(), month: parsed.getMonth() + 1, day: parsed.getDate() };
   return null;
@@ -5835,6 +5837,8 @@ function validVendorDateParts_(year, month, day) {
   if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
   return { year: year, month: month, day: day };
 }
+
+function vendorDateParts_(value) { return dateParts_(value, 'mdy'); }
 
 function vendorDateISO_(value) {
   const p = vendorDateParts_(value);
@@ -5848,7 +5852,8 @@ function formatVendorDate_(value) {
 
 // Shared display formatter for dates shown throughout every dashboard tab.
 function formatDateDDMMYYYY_(value) {
-  return formatVendorDate_(value);
+  const p = dateParts_(value, 'dmy');
+  return p ? String(p.day).padStart(2, '0') + '/' + String(p.month).padStart(2, '0') + '/' + String(p.year).padStart(4, '0') : '';
 }
 
 function toggleVendorInvoiceSelect(key, checked) {
@@ -6024,7 +6029,7 @@ function renderVendorInvoiceTab() {
     const detailRow = '<tr id="' + rowId + '" style="display:' + (vendorAllExpanded ? 'table-row' : 'none') + ';background:#f8fafc;">' +
       '<td colspan="8" style="padding:0 12px 12px 36px;">' +
         '<div style="font-size:11px;color:var(--muted);margin:6px 0 4px;">' +
-          (r.deliveryDate ? 'Delivery Date: <b>' + escapeHtml(formatDateDDMMYYYY_(r.deliveryDate) || r.deliveryDate) + '</b> &nbsp;·&nbsp; ' : '') +
+          (r.deliveryDate ? 'Delivery Date: <b>' + escapeHtml(formatVendorDate_(r.deliveryDate) || r.deliveryDate) + '</b> &nbsp;·&nbsp; ' : '') +
           (r.creditTerm ? 'Credit Term: <b>' + escapeHtml(r.creditTerm) + '</b>' : '') +
         '</div>' +
         (r.billToName || r.billToAddress || r.shipToName || r.shipToAddress ?
@@ -6183,7 +6188,7 @@ function renderPaymentVoucherInvoiceList() {
       const checked = vendorPaymentSelection.has(key);
       return '<label style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--border);font-size:13px;cursor:pointer;">' +
         '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleVendorInvoiceSelect(\'' + key.replace(/'/g,"\\'") + '\', this.checked); renderPaymentVoucherTab(); updatePvSelectionUI();">' +
-        '<span style="flex:1;">' + escapeHtml(r.vendorName) + ' — ' + escapeHtml(r.invoiceNo) + ' &nbsp;·&nbsp; ' + escapeHtml(formatDateDDMMYYYY_(r.invoiceDate) || '—') + '</span>' +
+        '<span style="flex:1;">' + escapeHtml(r.vendorName) + ' — ' + escapeHtml(r.invoiceNo) + ' &nbsp;·&nbsp; ' + escapeHtml(formatVendorDate_(r.invoiceDate) || '—') + '</span>' +
         '<b>' + escapeHtml(r.currency || 'SGD') + ' ' + (r.total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</b>' +
       '</label>';
     }).join('') +
@@ -6276,8 +6281,8 @@ function renderPaymentVoucherTab() {
     const rowsHtml = invs.map(function(r) {
       const key = invKey_(r.vendorName, r.invoiceNo);
       return '<div style="display:flex;justify-content:space-between;padding:8px 16px;border-top:1px solid var(--border);font-size:13px;">' +
-        '<span>' + escapeHtml(r.invoiceNo || '—') + ' &nbsp;·&nbsp; ' + escapeHtml(formatDateDDMMYYYY_(r.invoiceDate) || '—') +
-          (r.paymentDueDate ? ' &nbsp;·&nbsp; Due: ' + escapeHtml(formatDateDDMMYYYY_(r.paymentDueDate) || '—') : '') + '</span>' +
+        '<span>' + escapeHtml(r.invoiceNo || '—') + ' &nbsp;·&nbsp; ' + escapeHtml(formatVendorDate_(r.invoiceDate) || '—') +
+          (r.paymentDueDate ? ' &nbsp;·&nbsp; Due: ' + escapeHtml(formatVendorDate_(r.paymentDueDate) || '—') : '') + '</span>' +
         '<span style="display:flex;align-items:center;gap:10px;">' +
           '<b>' + escapeHtml(r.currency || 'SGD') + ' ' + (r.total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</b>' +
           '<button onclick="toggleVendorInvoiceSelect(\'' + key.replace(/'/g,"\\'") + '\', false); renderPaymentVoucherTab();" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:12px;">Remove</button>' +
@@ -6360,7 +6365,7 @@ function buildPaymentVoucherPDFPage(d) {
   const invoiceRowsHtml = d.invoices.map(function(inv) {
     return `<tr>
       <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(inv.invoiceNo || '—')}</td>
-      <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(formatDateDDMMYYYY_(inv.invoiceDate) || '—')}</td>
+      <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(formatVendorDate_(inv.invoiceDate) || '—')}</td>
       <td style="padding:8px;border:1px solid #ddd;text-align:right;">${escapeHtml(inv.currency||'SGD')} ${(inv.total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
     </tr>`;
   }).join('');
@@ -7121,7 +7126,7 @@ function renderVendorSoaTab() {
     html += entityEntries.map(function(e) {
       const isPayment = e.type === 'Payment';
       return '<tr' + (isPayment ? ' style="background:#f0fdf4"' : '') + '>' +
-        '<td style="padding:8px 12px;">' + escapeHtml(formatDateDDMMYYYY_(e.date) || '—') + '</td>' +
+        '<td style="padding:8px 12px;">' + escapeHtml((e.type === 'Payment' ? formatDateDDMMYYYY_(e.date) : formatVendorDate_(e.date)) || '—') + '</td>' +
         '<td style="padding:8px 12px;">' +
           '<span class="badge" style="background:' + (isPayment ? '#dcfce7;color:#15803d' : '#dbeafe;color:#1d4ed8') + ';">' + e.type + '</span>' +
         '</td>' +
@@ -7220,7 +7225,7 @@ function buildVendorSoaPrintPage(vendorName, yearFilter, ledger) {
     bodyRowsHtml += entityEntries.map(function(e) {
       const isPayment = e.type === 'Payment';
       return `<tr style="${isPayment ? 'background:#f0fdf4;' : ''}">
-        <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(formatDateDDMMYYYY_(e.date) || '—')}</td>
+        <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml((e.type === 'Payment' ? formatDateDDMMYYYY_(e.date) : formatVendorDate_(e.date)) || '—')}</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(e.type)}</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;">${escapeHtml(e.reference)}</td>
         <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;">${e.debit ? e.debit.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</td>
