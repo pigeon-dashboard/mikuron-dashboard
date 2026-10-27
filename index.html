@@ -1170,6 +1170,11 @@
 
     <div class="summary-cards" id="vendorSummaryCards"></div>
 
+    <div id="vendorFilteredSubtotal" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 0;padding:14px 16px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;color:#312e81;">
+      <div><div style="font-size:12px;font-weight:600;color:#6d28d9;">FILTERED INVOICE SUBTOTAL</div><div id="vendorFilteredSubtotalCount" style="font-size:12px;color:#64748b;margin-top:3px;">0 invoices</div></div>
+      <div id="vendorFilteredSubtotalValue" style="font-size:20px;font-weight:750;letter-spacing:-.02em;">—</div>
+    </div>
+
     <div style="display:flex; align-items:center; gap:10px; padding:10px 16px; background:#f8fafc; border:1px solid var(--border); border-radius:10px 10px 0 0; margin-top:16px; flex-wrap:wrap;">
       <input type="checkbox" id="vendorSelectAll" onchange="toggleVendorSelectAll(this.checked)">
       <label for="vendorSelectAll" style="cursor:pointer; font-weight:600; font-size:13px;">Select all (unpaid only)</label>
@@ -5941,16 +5946,35 @@ function renderVendorInvoiceTab() {
     return true;
   });
 
-  // Newest invoice date first; invoices without a usable invoice date go last.
+  // Keep related invoices together: vendor name, then invoice number, then invoice date.
   rows.sort(function(a, b) {
+    const vendorOrder = String(a.vendorName || '').localeCompare(String(b.vendorName || ''), undefined, { numeric: true, sensitivity: 'base' });
+    if (vendorOrder) return vendorOrder;
+    const invoiceOrder = String(a.invoiceNo || '').localeCompare(String(b.invoiceNo || ''), undefined, { numeric: true, sensitivity: 'base' });
+    if (invoiceOrder) return invoiceOrder;
     const dateA = vendorDateISO_(a.invoiceDate);
     const dateB = vendorDateISO_(b.invoiceDate);
-    if (dateA && dateB && dateA !== dateB) return dateB.localeCompare(dateA);
-    if (dateA && !dateB) return -1;
-    if (!dateA && dateB) return 1;
-    const invoiceOrder = String(a.invoiceNo || '').localeCompare(String(b.invoiceNo || ''), undefined, { numeric: true, sensitivity: 'base' });
-    return invoiceOrder || String(a.vendorName || '').localeCompare(String(b.vendorName || ''), undefined, { sensitivity: 'base' });
+    if (dateA && dateB) return dateA.localeCompare(dateB);
+    if (dateA) return -1;
+    if (dateB) return 1;
+    return 0;
   });
+
+  // Subtotal follows the active filter/search results, grouped by currency to avoid mixing unlike values.
+  const subtotalByCurrency = {};
+  rows.forEach(function(r) {
+    const currency = String(r.currency || 'SGD').trim().toUpperCase() || 'SGD';
+    subtotalByCurrency[currency] = (subtotalByCurrency[currency] || 0) + (Number(r.total) || 0);
+  });
+  const subtotalCountEl = document.getElementById('vendorFilteredSubtotalCount');
+  const subtotalValueEl = document.getElementById('vendorFilteredSubtotalValue');
+  if (subtotalCountEl) subtotalCountEl.textContent = rows.length.toLocaleString() + ' invoice' + (rows.length === 1 ? '' : 's') + ' match current filters';
+  if (subtotalValueEl) {
+    const subtotalCurrencies = Object.keys(subtotalByCurrency).sort();
+    subtotalValueEl.innerHTML = subtotalCurrencies.length
+      ? subtotalCurrencies.map(function(currency) { return '<span style="display:inline-block;margin-left:12px;white-space:nowrap;">' + escapeHtml(currency) + ' ' + subtotalByCurrency[currency].toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</span>'; }).join('')
+      : '<span style="color:#94a3b8;">—</span>';
+  }
 
   // Summary cards
   const totalCount   = vendorInvoices.length;
