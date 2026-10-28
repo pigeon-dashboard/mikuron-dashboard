@@ -4391,6 +4391,9 @@ function buildLabelWindowHTML(list, dateStr, iso) {
   'input.f,input.cop{border:1px solid #d5dce3;border-radius:3px;padding:5px 7px;' +
     'font-family:ui-monospace,Consolas,monospace;font-size:12px;width:100%}' +
   'input.qty,input.cop{width:72px}' +
+  '.part-sources{display:flex;gap:10px;min-height:33px;align-items:center;border:1px solid #d5dce3;border-radius:4px;padding:5px 9px}' +
+  '.part-sources label{display:flex;align-items:center;gap:5px;white-space:nowrap;font-size:11px;letter-spacing:0;text-transform:none;color:#263544}' +
+  '.part-sources input{width:auto;margin:0}' +
   'button{font:600 13px system-ui;padding:10px 16px;border-radius:4px;border:1px solid #d5dce3;' +
          'background:#fff;cursor:pointer;margin-right:8px}' +
   'button.go{background:#b26a00;color:#fff;border-color:#b26a00}' +
@@ -4424,10 +4427,9 @@ function buildLabelWindowHTML(list, dateStr, iso) {
         '<option value="a4b">A4 — 47 × 35 mm, 32 per sheet</option>' +
         '<option value="roll">Roll 60 × 40 mm (thermal)</option>' +
       '</select></div>' +
-      '<div class="opt"><label>Part no from</label><select id="src">' +
-        '<option value="drawing">Drawing No</option>' +
-        '<option value="item">Item code</option>' +
-      '</select></div>' +
+      '<div class="opt"><label>Part no from (multiple)</label>' +
+        '<div class="part-sources"><label><input type="checkbox" class="src-check" id="srcDrawing" checked> DWG No</label>' +
+        '<label><input type="checkbox" class="src-check" id="srcItem"> Item Code</label></div></div>' +
       '<div class="opt"><label>Label date</label>' +
         '<input id="dt" type="date" value="' + escapeHtml(iso) + '" style="width:140px"></div>' +
       '<div class="opt"><label>Font pt</label><input id="fs" type="number" step="0.5" min="5" value="13"></div>' +
@@ -4489,51 +4491,50 @@ function labelWindowScript() {
     var el = document.querySelector('.cop[data-i="' + i + '"]');
     return el ? (parseInt(el.value) || 0) : 0;
   }
+  // Both sources can be shown as separate lines on the SAME label.
+  // If neither is chosen, retain the editable Part No as a fallback.
+  function selectedParts(r) {
+    var parts = [];
+    if ($('srcDrawing').checked && String(r.drawing || '').trim()) parts.push(String(r.drawing).trim());
+    if ($('srcItem').checked && String(r.item || '').trim()) parts.push(String(r.item).trim());
+    // Avoid duplicate printed lines where the two source fields are identical.
+    parts = parts.filter(function (v, i, a) { return a.findIndex(function (x) { return x.toUpperCase() === v.toUpperCase(); }) === i; });
+    return parts.length ? parts : [r.part || r.drawing || r.item || ''];
+  }
   function labelInner(r) {
-    return [r.po, r.pr, r.part,
+    return [r.po, r.pr].concat(selectedParts(r), [
             'QTY:' + (Math.round(r.qty * 1000) / 1000) + 'PCS',
-            'DATE:' + DATE]
+            'DATE:' + DATE])
       .filter(function (x) { return String(x == null ? '' : x).trim() !== ''; })
       .map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('');
   }
 
-  // switching the source refills the Part no inputs from the chosen field
-  function applySource() {
-    var src = $('src').value;
-    document.querySelectorAll('.f[data-k="part"]').forEach(function (el) {
-      var i = +el.dataset.i;
-      var v = (src === 'item') ? DATA[i].item : (DATA[i].drawing || DATA[i].item);
-      el.value = v; DATA[i].part = v;
-    });
-  }
-
-  // Start every line at the chosen pt; shrink a line only if too WIDE, then
-  // shrink the whole label only if the stack is too TALL for its cell.
+  // Measure every line as well as the complete text stack. Using scrollHeight
+  // on an overflow:hidden flex box alone can miss clipping at six or more rows.
   function fit(base) {
     var MIN = 5;
-    document.querySelectorAll('.label, .cell').forEach(function (box) {
-      var kids = box.querySelectorAll('div');
+    document.querySelectorAll('.label, .cell:not(.blank)').forEach(function (box) {
+      var kids = Array.prototype.slice.call(box.querySelectorAll('div'));
       if (!kids.length) return;
-      kids.forEach(function (el) { el.style.fontSize = base + 'pt'; });
-
-      kids.forEach(function (el) {                       // width pass, per line
-        for (var p = 0; p < 4; p++) {
-          var avail = el.clientWidth, need = el.scrollWidth;
-          if (!avail || need <= avail) break;
-          var cur = parseFloat(el.style.fontSize);
-          var next = Math.max(MIN, cur * (avail / need) * 0.98);
-          if (next >= cur) break;
-          el.style.fontSize = next + 'pt';
-        }
-      });
-
-      for (var q = 0; q < 10; q++) {                     // height pass, whole label
-        if (box.scrollHeight <= box.clientHeight) break;
+      kids.forEach(function (el) { el.style.fontSize = base + 'pt'; el.style.flexShrink = '0'; });
+      var css = window.getComputedStyle(box);
+      var availableHeight = box.clientHeight - (parseFloat(css.paddingTop)||0) - (parseFloat(css.paddingBottom)||0);
+      var availableWidth = box.clientWidth - (parseFloat(css.paddingLeft)||0) - (parseFloat(css.paddingRight)||0);
+      var gap = parseFloat(css.rowGap) || 0;
+      for (var attempt=0; attempt<30; attempt++) {
+        var totalHeight = (kids.length-1)*gap;
+        var anyWide = false;
+        kids.forEach(function (el) {
+          var computed = window.getComputedStyle(el);
+          totalHeight += el.getBoundingClientRect().height;
+          if (el.scrollWidth > Math.min(el.clientWidth || availableWidth,availableWidth) + 1) anyWide=true;
+        });
+        if (totalHeight <= availableHeight + .25 && !anyWide) break;
         var changed = false;
         kids.forEach(function (el) {
           var cur = parseFloat(el.style.fontSize);
-          var next = Math.max(MIN, cur * 0.94);
-          if (next < cur) { el.style.fontSize = next + 'pt'; changed = true; }
+          var next = Math.max(MIN, cur * .94);
+          if (next < cur-.01) { el.style.fontSize=next+'pt'; changed=true; }
         });
         if (!changed) break;
       }
@@ -4596,7 +4597,10 @@ function labelWindowScript() {
 
   function setPage(rule) { $('pagecss').textContent = rule; }
 
-  $('src').addEventListener('change', function () { applySource(); build(); });
+  document.querySelectorAll('.src-check').forEach(function (el) { el.addEventListener('change', function () {
+    if (!$('srcDrawing').checked && !$('srcItem').checked) { el.checked=true; }
+    build();
+  }); });
   $('rb').onclick = build;
   $('pr').onclick = function () { build(); setTimeout(function () { window.print(); }, 90); };
   document.addEventListener('input', build);
