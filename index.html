@@ -539,6 +539,7 @@
   </div>
 
   <div class="tabs">
+    <button class="tab-btn" id="tabBtnPerformance" onclick="switchTab('performance')">📈 Sales Performance</button>
     <button class="tab-btn active" id="tabBtnSales" onclick="switchTab('sales')">Sales Orders</button>
     <button class="tab-btn" id="tabBtnSubcon" onclick="switchTab('subcon')">Sub-Contract POs <span id="subconCountBadge"></span></button>
     <button class="tab-btn" id="tabBtnInvoice" onclick="switchTab('invoice')">Invoice & DO <span id="invoiceCountBadge"></span></button>
@@ -552,20 +553,33 @@
     <button class="tab-btn" id="tabBtnSoaArchive" onclick="switchTab('soaarchive')">🗂️ SOA Filing</button>
   </div>
 
+  <!-- SALES PERFORMANCE: live, filterable order-book value (not invoiced revenue) -->
+  <div class="tab-panel" id="panelPerformance">
+    <div class="sp-heading"><div><h2>Sales Performance</h2><p>Customer order value by requested delivery month · Live Sales Orders source · SGD</p></div><button class="sp-reset" onclick="spClear()">Reset all filters</button></div>
+    <div class="sp-filter-grid">
+      <div class="sp-field"><label>Year · multiple</label><details class="sp-dropdown" id="spYearDd"><summary id="spYearText">All years</summary><div class="sp-opts" id="spYears"></div></details></div>
+      <div class="sp-field"><label>Month · multiple</label><details class="sp-dropdown" id="spMonthDd"><summary id="spMonthText">All months</summary><div class="sp-opts" id="spMonths"></div></details></div>
+      <div class="sp-field"><label>Customer · multiple</label><details class="sp-dropdown" id="spCustDd"><summary id="spCustText">All customers</summary><div class="sp-opts" id="spCustomers"></div></details></div>
+      <div class="sp-field"><label>Status · multiple</label><details class="sp-dropdown" id="spStatusDd"><summary id="spStatusText">All statuses</summary><div class="sp-opts" id="spStatuses"></div></details></div>
+      <div class="sp-field"><label>Search PO / PR / Item / Drawing</label><input id="spSearch" placeholder="Search sales orders..." oninput="spRender()"></div>
+    </div>
+    <div class="sp-note" id="spNote"></div>
+    <div class="sp-kpis" id="spKpis"></div>
+    <div class="sp-two">
+      <section class="sp-panel"><h3>Monthly Sales Order Value</h3><div id="spMonthly" class="sp-viz"></div></section>
+      <section class="sp-panel"><h3>Sales by Customer · Top 12</h3><div id="spCustomer" class="sp-viz"></div></section>
+    </div>
+    <div class="sp-panel sp-wide"><h3>Sales by Customer and Month</h3><div class="sp-table-scroll"><table class="sp-table" id="spMatrix"></table></div></div>
+    <div class="sp-panel sp-wide"><h3>Existing Tab 1 graph · Order Value by Customer, by Month</h3>
+      <div class="chart-section"><div class="chart-header"><div class="chart-legend" id="chartLegend"></div></div><div class="chart-scroll"><div id="chartContainer"></div></div></div>
+    </div>
+  </div>
+
   <!-- ===================== TAB 1: SALES ORDERS ===================== -->
   <div class="tab-panel active" id="panelSales">
 
     <div class="summary-cards" id="summaryCards"></div>
 
-    <div class="chart-section">
-      <div class="chart-header">
-        <div class="chart-title">Order Value by Customer, by Month</div>
-        <div class="chart-legend" id="chartLegend"></div>
-      </div>
-      <div class="chart-scroll">
-        <div id="chartContainer"></div>
-      </div>
-    </div>
 
     <div class="export-bar">
       <button class="export-btn" onclick="exportSalesToExcel()">⬇ Export Table to Excel</button>
@@ -1756,12 +1770,13 @@ function onForexOverride(val) {
 
 function switchTab(tab) {
   currentTab = tab;
-  ['sales','subcon','invoice','outstanding','register','review','vendor','payment','pvlist','vendorsoa','soaarchive'].forEach(t => {
+  ['performance','sales','subcon','invoice','outstanding','register','review','vendor','payment','pvlist','vendorsoa','soaarchive'].forEach(t => {
     const btn   = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
     const panel = document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1));
     if (btn)   btn.classList.toggle('active', t === tab);
     if (panel) panel.classList.toggle('active', t === tab);
   });
+  if (tab === 'performance') { renderChart(allData); spRender(); }
   if (tab === 'sales')       renderData();
   if (tab === 'invoice') {
     setTimeout(function() {
@@ -8838,6 +8853,95 @@ function exportSOAPDF() {
   }
 </script>
      
+<style id="sales-performance-design">
+#panelPerformance{--sp-blue:#2456c8;--sp-border:#dfe7f3;--sp-muted:#64748b;color:#23354f}
+#panelPerformance .sp-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0}
+#panelPerformance .sp-heading h2{margin:0;font-size:25px;color:#102a56}#panelPerformance .sp-heading p{margin:4px 0;color:#64748b;font-size:12px}
+#panelPerformance .sp-reset{width:auto;background:#fff;border:1px solid #cbd5e1;color:#254781;padding:10px 15px;border-radius:9px}
+#panelPerformance .sp-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(145px,1fr)) minmax(210px,1.4fr);gap:12px;padding:16px;background:#fff;border:1px solid var(--sp-border);border-radius:15px;box-shadow:0 4px 18px #2547810d}
+#panelPerformance .sp-field{min-width:0}#panelPerformance .sp-field label{display:block;font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;margin-bottom:7px}
+#panelPerformance .sp-field input{width:100%;height:39px;font-size:12px;border:1px solid #cbd5e1;border-radius:8px;padding:8px}
+#panelPerformance .sp-dropdown{position:relative;width:100%;font-size:12px}#panelPerformance .sp-dropdown summary{display:block;cursor:pointer;border:1px solid #cbd5e1;border-radius:8px;padding:11px 23px 10px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:white;height:39px;position:relative}
+#panelPerformance .sp-dropdown summary:after{content:'▾';position:absolute;right:10px}#panelPerformance .sp-dropdown[open] summary{border-color:#2563eb}
+#panelPerformance .sp-opts{position:absolute;top:43px;z-index:100;left:0;min-width:100%;max-width:360px;width:max-content;max-height:285px;overflow:auto;padding:8px;background:#fff;border:1px solid #cbd5e1;border-radius:9px;box-shadow:0 10px 30px #102a5626}
+#panelPerformance .sp-opts label{font-weight:500;text-transform:none;font-size:12px;color:#334155;display:flex;gap:8px;padding:6px;align-items:center;margin:0;cursor:pointer;white-space:nowrap}#panelPerformance .sp-opts label:hover{background:#eff6ff}#panelPerformance .sp-opts input{height:14px;width:14px;margin:0;accent-color:#2563eb}
+#panelPerformance .sp-note{font-size:11px;color:#64748b;margin:10px 2px}
+#panelPerformance .sp-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0 16px}
+#panelPerformance .sp-kpi{background:#fff;border:1px solid var(--sp-border);padding:17px;border-radius:13px;border-top:3px solid #3b82f6;box-shadow:0 4px 16px #2547810b}
+#panelPerformance .sp-kpi small{display:block;font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase}#panelPerformance .sp-kpi b{font-size:25px;display:block;margin-top:7px;color:#183e86;overflow-wrap:anywhere}
+#panelPerformance .sp-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+#panelPerformance .sp-panel{background:white;border:1px solid var(--sp-border);border-radius:14px;padding:17px;min-width:0;margin-bottom:14px;box-shadow:0 5px 17px #2547810b}
+#panelPerformance .sp-panel h3{margin:0 0 18px;font-size:15px;color:#233d68}
+#panelPerformance .sp-viz{min-height:245px;overflow:auto}#panelPerformance .sp-wide{margin-top:0}
+#panelPerformance .sp-table-scroll{overflow:auto;max-height:480px}#panelPerformance .sp-table{border-collapse:collapse;min-width:650px;width:100%;font-size:12px}
+#panelPerformance .sp-table th{position:sticky;top:0;background:#e9f1ff;padding:10px;text-align:right;white-space:nowrap}#panelPerformance .sp-table th:first-child,#panelPerformance .sp-table td:first-child{text-align:left;position:sticky;left:0;background:#fff;min-width:175px}
+#panelPerformance .sp-table td{padding:10px;text-align:right;border-bottom:1px solid #e8edf5;white-space:nowrap;font-variant-numeric:tabular-nums}#panelPerformance .sp-table .sp-total td{font-weight:bold;background:#e9f1ff}
+#panelPerformance .sp-barrow{display:grid;grid-template-columns:minmax(90px,145px) minmax(50px,1fr) 100px;align-items:center;gap:9px;margin:9px 0;font-size:11px}
+#panelPerformance .sp-barlabel{white-space:nowrap;text-overflow:ellipsis;overflow:hidden}#panelPerformance .sp-barbg{background:#eef2f8;border-radius:6px;overflow:hidden;height:17px}#panelPerformance .sp-bar{background:linear-gradient(90deg,#60a5fa,#2252be);height:100%;border-radius:6px}
+#panelPerformance .sp-barnum{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}#panelPerformance .sp-empty{padding:35px;color:#64748b;text-align:center}
+@media(max-width:1000px){#panelPerformance .sp-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#panelPerformance .sp-two{grid-template-columns:1fr}}
+@media(max-width:620px){#panelPerformance .sp-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#panelPerformance .sp-filter-grid{grid-template-columns:1fr}#panelPerformance .sp-barrow{grid-template-columns:95px 1fr 85px}}
+</style>
+<script id="sales-performance-logic">
+(function(){
+  var selections={year:new Set(),month:new Set(),customer:new Set(),status:new Set()};
+  var monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function h(v){return String(v==null?'':v).replace(/[&<>"]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x]});}
+  function money(v){return 'S$'+Number(v||0).toLocaleString('en-SG',{maximumFractionDigits:0});}
+  function opt(container,values,type,label){
+    var el=document.getElementById(container);if(!el)return;
+    var old=Array.from(el.querySelectorAll('input')).map(e=>e.value).sort().join('|');
+    if(old===values.slice().sort().join('|'))return;
+    // Retain selections where possible, but do not silently select newly added data.
+    selections[type]=new Set(Array.from(selections[type]).filter(v=>values.includes(v)));
+    el.innerHTML=values.map(v=>'<label><input type="checkbox" value="'+h(v)+'" data-sp="'+type+'" '+(selections[type].has(v)?'checked':'')+'>'+h(type==='month'?monthNames[Number(v)-1]:v)+'</label>').join('') || '<div style="padding:8px">No values</div>';
+    el.querySelectorAll('input').forEach(e=>e.addEventListener('change',function(){this.checked?selections[type].add(this.value):selections[type].delete(this.value);window.spRender();}));
+  }
+  function barchart(target,entries){
+    var el=document.getElementById(target);if(!el)return;
+    if(!entries.length){el.innerHTML='<div class="sp-empty">No matching sales orders.</div>';return;}
+    var max=Math.max(1,...entries.map(x=>Math.abs(x[1])));
+    el.innerHTML=entries.map(x=>'<div class="sp-barrow"><span class="sp-barlabel" title="'+h(x[0])+'">'+h(x[0])+'</span><span class="sp-barbg"><span class="sp-bar" style="display:block;width:'+Math.max(x[1]!==0?1:0,Math.abs(x[1])/max*100)+'%"></span></span><span class="sp-barnum">'+money(x[1])+'</span></div>').join('');
+  }
+  window.spClear=function(){Object.values(selections).forEach(s=>s.clear());var x=document.getElementById('spSearch');if(x)x.value='';document.querySelectorAll('#panelPerformance .sp-dropdown input:checked').forEach(x=>x.checked=false);window.spRender();};
+  window.spRender=function(){
+    if(!document.getElementById('panelPerformance'))return;
+    var data=Array.isArray(window.allData)?window.allData:(typeof allData!=='undefined'?allData:[]);
+    var customers=[...new Set(data.map(r=>String(r['Customer Name']||'Unknown').trim()))].sort();
+    var statuses=[...new Set(data.map(r=>String(r.Status||'Unspecified').trim()))].sort();
+    var months=[...new Set(data.map(r=>{var k=monthKeyOf(r['Requested Delivery']);return k?k.slice(5):'';}).filter(Boolean))].sort();
+    var years=[...new Set(data.map(r=>{var k=monthKeyOf(r['Requested Delivery']);return k?k.slice(0,4):'';}).filter(Boolean))].sort().reverse();
+    opt('spYears',years,'year');opt('spMonths',months,'month');opt('spCustomers',customers,'customer');opt('spStatuses',statuses,'status');
+    [['year','spYearText','years'],['month','spMonthText','months'],['customer','spCustText','customers'],['status','spStatusText','statuses']].forEach(t=>{var e=document.getElementById(t[1]);if(e)e.textContent=selections[t[0]].size?selections[t[0]].size+' selected':'All '+t[2];});
+    var query=(document.getElementById('spSearch')?.value||'').toLowerCase().trim();
+    var rows=data.filter(r=>{
+      var k=monthKeyOf(r['Requested Delivery']),customer=String(r['Customer Name']||'Unknown').trim(),status=String(r.Status||'Unspecified').trim();
+      if(selections.year.size&&(!k||!selections.year.has(k.slice(0,4))))return false;
+      if(selections.month.size&&(!k||!selections.month.has(k.slice(5))))return false;
+      if(selections.customer.size&&!selections.customer.has(customer))return false;
+      if(selections.status.size&&!selections.status.has(status))return false;
+      return !query||['Customer PO No','PR No','Item','Drawing No','Description','Customer Name'].some(x=>String(r[x]||'').toLowerCase().includes(query));
+    });
+    var total=rows.reduce((a,r)=>a+(parseFloat(String(r['Total Price']||'').replace(/,/g,''))||0),0);
+    var poSet=new Set(rows.map(r=>String(r['Customer Name']||'')+'||'+String(r['Customer PO No']||'')));
+    var cm=new Map(),m=new Map(),matrix=new Map();var dated=0;
+    rows.forEach(r=>{
+      var cust=String(r['Customer Name']||'Unknown').trim(),key=monthKeyOf(r['Requested Delivery']),v=parseFloat(String(r['Total Price']||'').replace(/,/g,''))||0;
+      cm.set(cust,(cm.get(cust)||0)+v);
+      if(key){dated++;m.set(key,(m.get(key)||0)+v);var z=cust+''+key;matrix.set(z,(matrix.get(z)||0)+v);}
+    });
+    var kpi=[['Order book value',money(total)],['Customer POs',poSet.size.toLocaleString()],['Customers',cm.size.toLocaleString()],['Order lines',rows.length.toLocaleString()]];
+    document.getElementById('spKpis').innerHTML=kpi.map(k=>'<div class="sp-kpi"><small>'+k[0]+'</small><b>'+k[1]+'</b></div>').join('');
+    document.getElementById('spNote').textContent='Source: live Sales Orders · Grouped by Requested Delivery (not invoice posting date). '+rows.length+' matching lines · '+(rows.length-dated)+' without usable delivery date excluded from monthly charts. Values are order amounts, not recognised sales revenue.';
+    var sortedMonths=[...m.keys()].sort(),custRanks=[...cm.entries()].sort((a,b)=>b[1]-a[1]);
+    barchart('spMonthly',sortedMonths.map(k=>[monthLabel(k),m.get(k)]));barchart('spCustomer',custRanks.slice(0,12));
+    var cs=custRanks.map(x=>x[0]),heads=sortedMonths.map(k=>'<th>'+h(monthLabel(k))+'</th>').join('');
+    var body=cs.map(c=>'<tr><td title="'+h(c)+'">'+h(c)+'</td>'+sortedMonths.map(k=>'<td>'+money(matrix.get(c+''+k)||0)+'</td>').join('')+'<td><b>'+money(sortedMonths.reduce((s,k)=>s+(matrix.get(c+''+k)||0),0))+'</b></td></tr>').join('');
+    var foot='<tr class="sp-total"><td>Total</td>'+sortedMonths.map(k=>'<td>'+money(m.get(k))+'</td>').join('')+'<td>'+money([...m.values()].reduce((a,b)=>a+b,0))+'</td></tr>';
+    document.getElementById('spMatrix').innerHTML='<thead><tr><th>Customer</th>'+heads+'<th>Total</th></tr></thead><tbody>'+body+foot+'</tbody>';
+  };
+})();
+</script>
 </body>
 </html>
 <!--
