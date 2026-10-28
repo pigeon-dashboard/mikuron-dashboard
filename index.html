@@ -4367,7 +4367,8 @@ function buildLabelWindowHTML(list, dateStr, iso) {
     return '<tr>' +
       '<td><input class="f" data-k="po"   data-i="' + i + '" value="' + escapeHtml(r.po)   + '"></td>' +
       '<td><input class="f" data-k="pr"   data-i="' + i + '" value="' + escapeHtml(r.pr)   + '"></td>' +
-      '<td><input class="f" data-k="part" data-i="' + i + '" value="' + escapeHtml(r.part) + '"></td>' +
+      '<td><input class="f" data-k="drawing" data-i="' + i + '" value="' + escapeHtml(r.drawing) + '"></td>' +
+      '<td><input class="f" data-k="item" data-i="' + i + '" value="' + escapeHtml(r.item) + '"></td>' +
       '<td><input class="f qty" data-k="qty" data-i="' + i + '" type="number" step="any" value="' + r.qty + '"></td>' +
       '<td><input class="cop" data-i="' + i + '" type="number" min="0" max="99" value="1"></td>' +
     '</tr>';
@@ -4394,6 +4395,9 @@ function buildLabelWindowHTML(list, dateStr, iso) {
   '.part-sources{display:flex;gap:10px;min-height:33px;align-items:center;border:1px solid #d5dce3;border-radius:4px;padding:5px 9px}' +
   '.part-sources label{display:flex;align-items:center;gap:5px;white-space:nowrap;font-size:11px;letter-spacing:0;text-transform:none;color:#263544}' +
   '.part-sources input{width:auto;margin:0}' +
+  '.label-toggles{display:flex;gap:13px;align-items:center;border:1px solid #d5dce3;border-radius:4px;min-height:33px;padding:5px 9px}' +
+  '.label-toggles label{display:flex;gap:5px;align-items:center;font-size:11px;white-space:nowrap;letter-spacing:0;text-transform:none;color:#263544}' +
+  '.label-toggles input{width:auto;margin:0}' +
   'button{font:600 13px system-ui;padding:10px 16px;border-radius:4px;border:1px solid #d5dce3;' +
          'background:#fff;cursor:pointer;margin-right:8px}' +
   'button.go{background:#b26a00;color:#fff;border-color:#b26a00}' +
@@ -4427,6 +4431,9 @@ function buildLabelWindowHTML(list, dateStr, iso) {
         '<option value="a4b">A4 — 47 × 35 mm, 32 per sheet</option>' +
         '<option value="roll">Roll 60 × 40 mm (thermal)</option>' +
       '</select></div>' +
+      '<div class="opt"><label>Print PO / PR (multiple)</label>' +
+        '<div class="label-toggles"><label><input type="checkbox" class="header-check" id="showPO" checked> Customer PO</label>' +
+        '<label><input type="checkbox" class="header-check" id="showPR" checked> PR No</label></div></div>' +
       '<div class="opt"><label>Part no from (multiple)</label>' +
         '<div class="part-sources"><label><input type="checkbox" class="src-check" id="srcDrawing" checked> DWG No</label>' +
         '<label><input type="checkbox" class="src-check" id="srcItem"> Item Code</label></div></div>' +
@@ -4438,7 +4445,7 @@ function buildLabelWindowHTML(list, dateStr, iso) {
       '<div class="opt sheetonly"><label>Nudge Y mm</label><input id="oy" type="number" step="0.5" value="0"></div>' +
       '<div class="opt sheetonly"><label>Indent col 3-4</label><input id="ind" type="number" step="0.5" value="0"></div>' +
     '</div>' +
-    '<table><thead><tr><th>Customer PO</th><th>PR No</th><th>Part no</th>' +
+    '<table><thead><tr><th>Customer PO</th><th>PR No</th><th>DWG No</th><th>Item Code</th>' +
     '<th>Qty</th><th>Copies</th></tr></thead><tbody>' + editRows + '</tbody></table>' +
     '<div style="margin-top:12px"><button class="go" id="pr">Print labels</button>' +
     '<button id="rb">Rebuild preview</button>' +
@@ -4499,10 +4506,10 @@ function labelWindowScript() {
     if ($('srcItem').checked && String(r.item || '').trim()) parts.push(String(r.item).trim());
     // Avoid duplicate printed lines where the two source fields are identical.
     parts = parts.filter(function (v, i, a) { return a.findIndex(function (x) { return x.toUpperCase() === v.toUpperCase(); }) === i; });
-    return parts.length ? parts : [r.part || r.drawing || r.item || ''];
+    return parts; // A selected source with an empty value does not invent a line.
   }
   function labelInner(r) {
-    return [r.po, r.pr].concat(selectedParts(r), [
+    return [($('showPO').checked ? r.po : ''), ($('showPR').checked ? r.pr : '')].concat(selectedParts(r), [
             'QTY:' + (Math.round(r.qty * 1000) / 1000) + 'PCS',
             'DATE:' + DATE])
       .filter(function (x) { return String(x == null ? '' : x).trim() !== ''; })
@@ -4597,6 +4604,11 @@ function labelWindowScript() {
 
   function setPage(rule) { $('pagecss').textContent = rule; }
 
+  document.querySelectorAll('.header-check').forEach(function (el) { el.addEventListener('change', function () {
+    // At least one of PO / PR remains visible.
+    if (!$('showPO').checked && !$('showPR').checked) el.checked = true;
+    build();
+  }); });
   document.querySelectorAll('.src-check').forEach(function (el) { el.addEventListener('change', function () {
     if (!$('srcDrawing').checked && !$('srcItem').checked) { el.checked=true; }
     build();
