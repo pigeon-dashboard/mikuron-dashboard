@@ -925,9 +925,10 @@
         <span style="font-size:16px;">📬</span>
         <span style="font-weight:700; color:#92400e; font-size:13px;">Pending Signed DOs — waiting for assignment</span>
         <span id="doQueueCount" style="background:#dc2626; color:#fff; border-radius:10px; padding:1px 8px; font-size:11px; font-weight:700;"></span>
-        <span style="font-size:12px; color:#92400e; margin-left:4px;">Scanned from Brother / forwarded from phone — click each to assign to the correct invoice</span>
+        <span style="font-size:12px; color:#92400e; margin-left:4px;">Pending documents are retained; expand only when assignment is needed.</span>
+        <button type="button" id="doQueueToggle" aria-expanded="false" onclick="toggleDOQueuePanel()" style="margin-left:auto; flex-shrink:0; background:#fff; border:1px solid #d97706; border-radius:7px; padding:7px 12px; color:#92400e; font-weight:700; font-size:12px; cursor:pointer;">Show Pending DOs ▾</button>
       </div>
-      <div id="doQueueItems" style="padding:12px 16px; display:flex; flex-wrap:wrap; gap:12px;"></div>
+      <div id="doQueueItems" style="display:none; padding:12px 16px; flex-wrap:wrap; gap:12px;"></div>
     </div>
 
     <!-- ── DO ASSIGNMENT MODAL ────────────────────────────────────────────── -->
@@ -8248,6 +8249,22 @@ async function loadDOQueue() {
   } catch(e) { console.log('Queue load failed:', e.message); }
 }
 
+// Keep the pending assignment queue compact on initial load and refresh.
+// The toggle only changes visibility; it does not change pending records or Drive status.
+let doQueueExpanded = false;
+function toggleDOQueuePanel() {
+  doQueueExpanded = !doQueueExpanded;
+  updateDOQueueVisibility();
+}
+function updateDOQueueVisibility() {
+  const items = document.getElementById('doQueueItems');
+  const button = document.getElementById('doQueueToggle');
+  if (items) items.style.display = doQueueExpanded ? 'flex' : 'none';
+  if (button) {
+    button.textContent = doQueueExpanded ? 'Hide Pending DOs ▴' : 'Show Pending DOs ▾';
+    button.setAttribute('aria-expanded', doQueueExpanded ? 'true' : 'false');
+  }
+}
 function renderDOQueue() {
   const panel    = document.getElementById('doQueuePanel');
   const container= document.getElementById('doQueueItems');
@@ -8287,6 +8304,7 @@ function renderDOQueue() {
       '<button class="card-assign-btn" onclick="event.stopPropagation();openDOModal(\'' + item.fileId + '\')">📋 Assign to Invoice</button>' +
       '</div>';
   }).join('');
+  updateDOQueueVisibility();
 }
 
 function openDOModal(fileId) {
