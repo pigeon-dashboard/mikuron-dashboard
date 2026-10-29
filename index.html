@@ -10618,3 +10618,474 @@ function exportSOAPDF() {
   window.__scpoRegister = true;
 })();
 </script>
+
+
+<style id="invoice-supplier-analytics-style">
+#panelPostedsales,#panelSupplierdash{--mx-bg:#f5f8fd;--mx-card:#ffffff;--mx-border:#dbe4f0;--mx-text:#1e3354;--mx-muted:#64748b;--mx-blue:#2563eb;--mx-purple:#7c3aed;--mx-green:#0f766e;--mx-orange:#ea580c;color:var(--mx-text)}
+#panelPostedsales .mx-heading,#panelSupplierdash .mx-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 14px;flex-wrap:wrap}
+#panelPostedsales .mx-heading h2,#panelSupplierdash .mx-heading h2{margin:0;font-size:26px;color:#183153;letter-spacing:-.02em}
+#panelPostedsales .mx-heading p,#panelSupplierdash .mx-heading p{margin:5px 0 0;color:var(--mx-muted);font-size:12px}
+#panelPostedsales .mx-reset,#panelSupplierdash .mx-reset{width:auto;background:#fff;border:1px solid #cdd9ea;color:#1d4ed8;padding:10px 15px;border-radius:10px;font-weight:700}
+#panelPostedsales .mx-filter-grid,#panelSupplierdash .mx-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr)) minmax(220px,1.4fr);gap:12px;padding:16px;background:linear-gradient(180deg,#fff,#fbfcff);border:1px solid var(--mx-border);border-radius:16px;box-shadow:0 8px 28px rgba(15,23,42,.06)}
+#panelPostedsales .mx-field,#panelSupplierdash .mx-field{min-width:0}
+#panelPostedsales .mx-field label,#panelSupplierdash .mx-field label{display:block;font-size:11px;text-transform:uppercase;font-weight:800;color:var(--mx-muted);margin-bottom:7px;letter-spacing:.04em}
+#panelPostedsales .mx-field input,#panelSupplierdash .mx-field input{width:100%;height:40px;font-size:12px;border:1px solid #cad5e6;border-radius:9px;padding:8px 10px;background:#fff}
+#panelPostedsales .mx-dropdown,#panelSupplierdash .mx-dropdown{position:relative;width:100%;font-size:12px}
+#panelPostedsales .mx-dropdown summary,#panelSupplierdash .mx-dropdown summary{display:block;cursor:pointer;border:1px solid #cad5e6;border-radius:9px;padding:11px 26px 10px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#fff;height:40px;position:relative;list-style:none}
+#panelPostedsales .mx-dropdown summary::-webkit-details-marker,#panelSupplierdash .mx-dropdown summary::-webkit-details-marker{display:none}
+#panelPostedsales .mx-dropdown summary:after,#panelSupplierdash .mx-dropdown summary:after{content:'▾';position:absolute;right:10px;color:#64748b}
+#panelPostedsales .mx-dropdown[open] summary,#panelSupplierdash .mx-dropdown[open] summary{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+#panelPostedsales .mx-opts,#panelSupplierdash .mx-opts{position:absolute;top:44px;left:0;z-index:150;min-width:100%;max-width:420px;width:max-content;max-height:290px;overflow:auto;padding:8px;background:#fff;border:1px solid #cad5e6;border-radius:10px;box-shadow:0 18px 38px rgba(15,23,42,.18)}
+#panelPostedsales .mx-opts label,#panelSupplierdash .mx-opts label{font-weight:500;text-transform:none;font-size:12px;color:#334155;display:flex;gap:8px;padding:6px 7px;align-items:center;margin:0;cursor:pointer;white-space:nowrap;border-radius:6px}
+#panelPostedsales .mx-opts label:hover,#panelSupplierdash .mx-opts label:hover{background:#eff6ff}
+#panelPostedsales .mx-opts input,#panelSupplierdash .mx-opts input{height:14px;width:14px;margin:0;accent-color:#2563eb}
+#panelPostedsales .mx-note,#panelSupplierdash .mx-note{font-size:11px;color:var(--mx-muted);margin:10px 2px 14px}
+#panelPostedsales .mx-kpis,#panelSupplierdash .mx-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:0 0 16px}
+#panelPostedsales .mx-kpi,#panelSupplierdash .mx-kpi{background:linear-gradient(180deg,#ffffff,#fbfdff);border:1px solid var(--mx-border);padding:18px;border-radius:15px;box-shadow:0 8px 24px rgba(15,23,42,.05);position:relative;overflow:hidden}
+#panelPostedsales .mx-kpi:before,#panelSupplierdash .mx-kpi:before{content:'';position:absolute;inset:0 auto auto 0;width:100%;height:4px;background:linear-gradient(90deg,var(--mx-blue),#8b5cf6)}
+#panelSupplierdash .mx-kpi:before{background:linear-gradient(90deg,#7c3aed,#06b6d4)}
+#panelPostedsales .mx-kpi small,#panelSupplierdash .mx-kpi small{display:block;font-size:11px;color:var(--mx-muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+#panelPostedsales .mx-kpi b,#panelSupplierdash .mx-kpi b{font-size:28px;display:block;margin-top:8px;color:#16356f;overflow-wrap:anywhere;line-height:1.15}
+#panelPostedsales .mx-kpi .mx-sub,#panelSupplierdash .mx-kpi .mx-sub{font-size:11px;color:#64748b;margin-top:5px;line-height:1.35}
+#panelPostedsales .mx-chipline,#panelSupplierdash .mx-chipline{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+#panelPostedsales .mx-chip,#panelSupplierdash .mx-chip{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;background:#eef4ff;color:#315ea7;font-size:11px;font-weight:700}
+#panelSupplierdash .mx-chip{background:#f3e8ff;color:#6d28d9}
+#panelPostedsales .mx-two,#panelSupplierdash .mx-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+#panelPostedsales .mx-panel,#panelSupplierdash .mx-panel{background:#fff;border:1px solid var(--mx-border);border-radius:15px;padding:18px;box-shadow:0 8px 24px rgba(15,23,42,.05);min-width:0;margin-bottom:14px}
+#panelPostedsales .mx-panel h3,#panelSupplierdash .mx-panel h3{margin:0 0 16px;font-size:15px;color:#233d68;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+#panelPostedsales .mx-panel h3 span,#panelSupplierdash .mx-panel h3 span{font-size:11px;color:#64748b;font-weight:600}
+#panelPostedsales .mx-viz,#panelSupplierdash .mx-viz{min-height:255px;overflow:auto}
+#panelPostedsales .mx-barrow,#panelSupplierdash .mx-barrow{display:grid;grid-template-columns:minmax(100px,190px) minmax(50px,1fr) 110px;align-items:center;gap:10px;margin:10px 0;font-size:12px}
+#panelPostedsales .mx-barlabel,#panelSupplierdash .mx-barlabel{white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-weight:600}
+#panelPostedsales .mx-barbg,#panelSupplierdash .mx-barbg{background:#edf2f7;border-radius:8px;overflow:hidden;height:18px}
+#panelPostedsales .mx-bar,#panelSupplierdash .mx-bar{height:100%;border-radius:8px;background:linear-gradient(90deg,#60a5fa,#2563eb)}
+#panelSupplierdash .mx-bar{background:linear-gradient(90deg,#c084fc,#7c3aed)}
+#panelPostedsales .mx-barnum,#panelSupplierdash .mx-barnum{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+#panelPostedsales .mx-table-scroll,#panelSupplierdash .mx-table-scroll{overflow:auto;max-height:520px}
+#panelPostedsales .mx-table,#panelSupplierdash .mx-table{border-collapse:collapse;min-width:760px;width:100%;font-size:12px}
+#panelPostedsales .mx-table th,#panelSupplierdash .mx-table th{position:sticky;top:0;background:#eef4ff;padding:10px;text-align:right;white-space:nowrap;z-index:1}
+#panelSupplierdash .mx-table th{background:#f4efff}
+#panelPostedsales .mx-table th:first-child,#panelPostedsales .mx-table td:first-child,#panelSupplierdash .mx-table th:first-child,#panelSupplierdash .mx-table td:first-child{text-align:left;position:sticky;left:0;background:#fff;min-width:195px;z-index:2}
+#panelPostedsales .mx-table td,#panelSupplierdash .mx-table td{padding:10px;text-align:right;border-bottom:1px solid #e8edf5;white-space:nowrap;font-variant-numeric:tabular-nums}
+#panelPostedsales .mx-table .mx-total td,#panelSupplierdash .mx-table .mx-total td{font-weight:800;background:#eef4ff}
+#panelSupplierdash .mx-table .mx-total td{background:#f4efff}
+#panelPostedsales .mx-empty,#panelSupplierdash .mx-empty{padding:42px;text-align:center;color:#64748b}
+#panelSupplierdash .mx-currency-block{border:1px solid #eee7ff;border-radius:12px;padding:12px 13px;margin-bottom:12px;background:linear-gradient(180deg,#fff,#fcfaff)}
+#panelSupplierdash .mx-currency-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:13px;font-weight:800;color:#5b21b6}
+@media(max-width:1100px){#panelPostedsales .mx-filter-grid,#panelSupplierdash .mx-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#panelPostedsales .mx-two,#panelSupplierdash .mx-two{grid-template-columns:1fr}}
+@media(max-width:680px){#panelPostedsales .mx-kpis,#panelSupplierdash .mx-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#panelPostedsales .mx-filter-grid,#panelSupplierdash .mx-filter-grid{grid-template-columns:1fr}#panelPostedsales .mx-barrow,#panelSupplierdash .mx-barrow{grid-template-columns:95px 1fr 90px}}
+</style>
+
+<script id="invoice-supplier-analytics-script">
+(function(){
+  function h(v){return String(v==null?'':v).replace(/[&<>"']/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]});}
+  function moneySG(v){return 'S$'+Number(v||0).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  function sum(arr){return arr.reduce(function(s,v){return s+(Number(v)||0);},0);}
+  var monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var psSel={year:new Set(),month:new Set(),customer:new Set(),status:new Set()};
+  var siSel={year:new Set(),month:new Set(),supplier:new Set(),status:new Set(),currency:new Set()};
+  var mxRange={pd:{period:'all',top:10},sd:{period:'all',top:10}};
+
+  function bootUI(){
+    var tabs=document.querySelector('.tabs');
+    if(tabs && !document.getElementById('tabBtnPostedsales')){
+      var perfBtn=document.getElementById('tabBtnPerformance');
+      if(perfBtn) perfBtn.insertAdjacentHTML('afterend',
+        '<button class="tab-btn" id="tabBtnPostedsales" onclick="switchTab(\'postedsales\')">💵 Posted Sales</button>'+
+        '<button class="tab-btn" id="tabBtnSupplierdash" onclick="switchTab(\'supplierdash\')">🧾 Supplier Dashboard</button>');
+    }
+    var perfPanel=document.getElementById('panelPerformance');
+    if(perfPanel && !document.getElementById('panelPostedsales')){
+      perfPanel.insertAdjacentHTML('afterend',
+      '<div class="tab-panel" id="panelPostedsales">'+
+        '<div class="mx-heading"><div><h2>Posted Sales Dashboard</h2><p>Actual posted sales based on Invoice Issue Date · sourced from Invoice Register · modern infographic view</p></div><button class="mx-reset" onclick="pdClear()">Reset filters</button></div>'+
+        '<div class="mx-filter-grid">'+
+          '<div class="mx-field"><label>Year · multiple</label><details class="mx-dropdown"><summary id="pdYearText">All years</summary><div class="mx-opts" id="pdYears"></div></details></div>'+
+          '<div class="mx-field"><label>Month · multiple</label><details class="mx-dropdown"><summary id="pdMonthText">All months</summary><div class="mx-opts" id="pdMonths"></div></details></div>'+
+          '<div class="mx-field"><label>Customer · multiple</label><details class="mx-dropdown"><summary id="pdCustText">All customers</summary><div class="mx-opts" id="pdCustomers"></div></details></div>'+
+          '<div class="mx-field"><label>Status · multiple</label><details class="mx-dropdown"><summary id="pdStatusText">All statuses</summary><div class="mx-opts" id="pdStatuses"></div></details></div>'+
+          '<div class="mx-field"><label>Search invoice / customer / PO / PR</label><input id="pdSearch" placeholder="Search issued invoices..." oninput="renderPostedSalesTab()"></div>'+
+        '</div>'+
+        '<div class="mx-actions" id="pdActions"></div>'+ '<div class="mx-note" id="pdNote"></div>'+
+        '<div class="mx-kpis" id="pdKpis"></div>'+
+        '<div class="mx-two">'+
+          '<section class="mx-panel"><h3>Posted Sales by Month <span id="pdMonthSub"></span></h3><div id="pdMonthly" class="mx-viz"></div></section>'+
+          '<section class="mx-panel"><h3>Posted Sales by Customer <span>Top customers by value</span></h3><div id="pdCustomer" class="mx-viz"></div></section>'+
+        '</div>'+
+        '<div class="mx-panel"><h3>Posted Sales by Customer and Month <span>Invoice issue month matrix</span></h3><div class="mx-table-scroll"><table class="mx-table" id="pdMatrix"></table></div></div>'+
+      '</div>'+
+      '<div class="tab-panel" id="panelSupplierdash">'+
+        '<div class="mx-heading"><div><h2>Supplier Invoice Dashboard</h2><p>Supplier invoice performance by invoice month and supplier · sourced from Vendor Invoices sheet · modern infographic view</p></div><button class="mx-reset" onclick="sdClear()">Reset filters</button></div>'+
+        '<div class="mx-filter-grid">'+
+          '<div class="mx-field"><label>Year · multiple</label><details class="mx-dropdown"><summary id="sdYearText">All years</summary><div class="mx-opts" id="sdYears"></div></details></div>'+
+          '<div class="mx-field"><label>Month · multiple</label><details class="mx-dropdown"><summary id="sdMonthText">All months</summary><div class="mx-opts" id="sdMonths"></div></details></div>'+
+          '<div class="mx-field"><label>Supplier · multiple</label><details class="mx-dropdown"><summary id="sdSupplierText">All suppliers</summary><div class="mx-opts" id="sdSuppliers"></div></details></div>'+
+          '<div class="mx-field"><label>Status · multiple</label><details class="mx-dropdown"><summary id="sdStatusText">All statuses</summary><div class="mx-opts" id="sdStatuses"></div></details></div>'+
+          '<div class="mx-field"><label>Currency · multiple</label><details class="mx-dropdown"><summary id="sdCurrencyText">All currencies</summary><div class="mx-opts" id="sdCurrencies"></div></details></div>'+
+          '<div class="mx-field"><label>Search supplier / invoice / item</label><input id="sdSearch" placeholder="Search supplier invoices..." oninput="renderSupplierInvoiceDash()"></div>'+
+        '</div>'+
+        '<div class="mx-actions" id="sdActions"></div>'+ '<div class="mx-note" id="sdNote"></div>'+
+        '<div class="mx-kpis" id="sdKpis"></div>'+
+        '<div class="mx-two">'+
+          '<section class="mx-panel"><h3>Supplier Invoice Value by Month <span>Grouped by currency for accuracy</span></h3><div id="sdMonthly" class="mx-viz"></div></section>'+
+          '<section class="mx-panel"><h3>Supplier Invoice Value by Supplier <span>Top suppliers by value</span></h3><div id="sdSupplier" class="mx-viz"></div></section>'+
+        '</div>'+
+        '<div class="mx-panel"><h3>Supplier Value by Supplier and Month <span>Rows are supplier / currency combinations</span></h3><div class="mx-table-scroll"><table class="mx-table" id="sdMatrix"></table></div></div>'+
+      '</div>');
+    }
+  }
+
+  function summaryText(set, allText, values){
+    if(!set || set.size===0) return allText;
+    if(set.size===1) return Array.from(set)[0];
+    return set.size + ' selected';
+  }
+  function matches(set,val){ return !set || set.size===0 || set.has(String(val)); }
+  function buildMulti(containerId, summaryId, values, setObj, renderFn, allText, formatter){
+    var el=document.getElementById(containerId), sumEl=document.getElementById(summaryId); if(!el||!sumEl) return;
+    values = Array.from(new Set((values||[]).filter(function(v){return String(v||'').trim()!=='';})));
+    var existing = new Set(values.map(String));
+    Array.from(setObj).forEach(function(v){ if(!existing.has(String(v))) setObj.delete(v); });
+    el.innerHTML = values.map(function(v){
+      var label = formatter ? formatter(v) : v;
+      var checked = setObj.has(String(v)) ? ' checked' : '';
+      return '<label><input type="checkbox" value="'+h(v)+'"'+checked+'> <span>'+h(label)+'</span></label>';
+    }).join('') || '<div class="mx-empty" style="padding:12px 8px">No options</div>';
+    Array.from(el.querySelectorAll('input')).forEach(function(cb){ cb.addEventListener('change', function(){ if(this.checked) setObj.add(this.value); else setObj.delete(this.value); renderFn(); }); });
+    sumEl.textContent = summaryText(setObj, allText, values);
+  }
+
+  function normalizeInvStatus(r){
+    if(!r) return '';
+    if(r.status === 'Paid') return 'Paid';
+    if(r.status === 'Cancelled') return 'Cancelled';
+    try{ if(typeof isOverdue==='function' && isOverdue(r.dueDate) && r.status !== 'Paid' && r.status !== 'Cancelled') return 'Overdue'; }catch(e){}
+    return 'Outstanding';
+  }
+  function monthKey(parts){ return parts ? (String(parts.year)+'-'+String(parts.month).padStart(2,'0')) : ''; }
+  function monthLabel(key){ if(!key) return ''; var a=String(key).split('-'); return monthNames[(+a[1])-1]+' '+a[0].slice(2); }
+
+  function mxDatePass(p,side){
+    var from=(document.getElementById(side+'From')||{}).value||'';
+    var to=(document.getElementById(side+'To')||{}).value||'';
+    var day=String(p.year).padStart(4,'0')+'-'+String(p.month).padStart(2,'0')+'-'+String(p.day).padStart(2,'0');
+    if(from && day<from)return false;
+    if(to && day>to)return false;
+    var now=new Date(), mode=mxRange[side].period;
+    if(mode==='ytd' && (p.year!==now.getFullYear() || day>localDate(now)))return false;
+    if(mode==='mtd' && (p.year!==now.getFullYear() || p.month!==now.getMonth()+1 || day>localDate(now)))return false;
+    if(mode==='monthly' && (p.year!==now.getFullYear() || p.month!==now.getMonth()+1))return false;
+    return true;
+  }
+  function localDate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function mxBuildActions(side){
+    var host=document.getElementById(side+'Actions');if(!host)return;
+    if(host.dataset.ready)return;
+    host.dataset.ready='1';
+    host.innerHTML='<div class="mx-action-field"><label>Period</label><select id="'+side+'Period"><option value="all">All dates</option><option value="mtd">MTD</option><option value="ytd">YTD</option><option value="monthly">Current month</option></select></div>'+
+      '<div class="mx-action-field"><label>From date</label><input type="date" id="'+side+'From"></div>'+
+      '<div class="mx-action-field"><label>To date</label><input type="date" id="'+side+'To"></div>'+
+      '<div class="mx-action-field"><label>Ranking</label><select id="'+side+'Top"><option value="10">Top 10</option><option value="20">Top 20</option></select></div>'+
+      '<div class="mx-action-buttons"><button type="button" onclick="mxExcel(&quot;'+side+'&quot;)">⬇ Excel</button><button type="button" onclick="mxPPT(&quot;'+side+'&quot;)">⬇ PowerPoint</button><button type="button" onclick="mxPNG(&quot;'+side+'&quot;)">⬇ Chart PNG</button></div>';
+    document.getElementById(side+'Period').onchange=function(){mxRange[side].period=this.value;mxRerender(side);};
+    document.getElementById(side+'Top').onchange=function(){mxRange[side].top=+this.value;mxRerender(side);};
+    ['From','To'].forEach(function(f){document.getElementById(side+f).onchange=function(){mxRerender(side);};});
+  }
+  function mxRerender(side){(side==='pd'?renderPostedSalesTab:renderSupplierInvoiceDash)();}
+  function rowsPosted(){
+    var search=((document.getElementById('pdSearch')||{value:''}).value||'').toLowerCase().trim();
+    return (window.invoiceRegister||[]).filter(function(r){
+      if(r.status==='Cancelled') return false;
+      var p = (typeof dateParts_==='function') ? dateParts_(r.date,'dmy') : null;
+      if(!p) return false;
+      if(!mxDatePass(p,'pd'))return false;
+      var year=String(p.year), month=String(p.month).padStart(2,'0'), customer=String(r.custName||'').trim(), status=normalizeInvStatus(r);
+      if(!matches(psSel.year, year)) return false;
+      if(!matches(psSel.month, month)) return false;
+      if(!matches(psSel.customer, customer)) return false;
+      if(!matches(psSel.status, status)) return false;
+      if(search){
+        var hay = [r.invNo,r.custName,r.custPO,r.prRef,r.status].join(' ').toLowerCase();
+        if(hay.indexOf(search)===-1) return false;
+      }
+      return true;
+    });
+  }
+  function fullPostedOptions(){
+    var src=(window.invoiceRegister||[]).filter(function(r){ return (typeof dateParts_==='function') ? !!dateParts_(r.date,'dmy') : !!r.date; });
+    return {
+      years: Array.from(new Set(src.map(function(r){ var p=dateParts_(r.date,'dmy'); return p?String(p.year):''; }).filter(Boolean))).sort().reverse(),
+      months: Array.from(new Set(src.map(function(r){ var p=dateParts_(r.date,'dmy'); return p?String(p.month).padStart(2,'0'):''; }).filter(Boolean))).sort(function(a,b){ return +a-+b; }),
+      customers: Array.from(new Set(src.map(function(r){ return String(r.custName||'').trim(); }).filter(Boolean))).sort(),
+      statuses: ['Paid','Outstanding','Overdue','Cancelled'].filter(function(st){ return src.some(function(r){ return normalizeInvStatus(r)===st;}); })
+    };
+  }
+  function renderBarBlock(targetId, items, opts){
+    var el=document.getElementById(targetId); if(!el) return;
+    if(!items || !items.length){ el.innerHTML='<div class="mx-empty">No data matches the current filters.</div>'; return; }
+    var max=Math.max.apply(null, items.map(function(x){return x.value||0;})) || 1;
+    el.innerHTML = items.map(function(x){
+      var pct=Math.max(3, Math.round(((x.value||0)/max)*100));
+      return '<div class="mx-barrow">'+
+        '<div class="mx-barlabel" title="'+h(x.label)+'">'+h(x.label)+'</div>'+
+        '<div class="mx-barbg"><div class="mx-bar" style="width:'+pct+'%"></div></div>'+
+        '<div class="mx-barnum">'+h((opts&&opts.format)?opts.format(x.value,x.currency):String(x.value))+'</div>'+
+      '</div>';
+    }).join('');
+  }
+  function renderPostedSalesTab(){
+    if(!document.getElementById('panelPostedsales')) return;
+    var opts=fullPostedOptions();
+    buildMulti('pdYears','pdYearText',opts.years,psSel.year,renderPostedSalesTab,'All years');
+    buildMulti('pdMonths','pdMonthText',opts.months,psSel.month,renderPostedSalesTab,'All months',function(v){ return monthNames[(+v)-1]; });
+    buildMulti('pdCustomers','pdCustText',opts.customers,psSel.customer,renderPostedSalesTab,'All customers');
+    buildMulti('pdStatuses','pdStatusText',opts.statuses,psSel.status,renderPostedSalesTab,'All statuses');
+
+    mxBuildActions('pd');
+    var rows=rowsPosted().filter(function(r){return r.status!=='Cancelled';});
+    var note=document.getElementById('pdNote');
+    if(note) note.innerHTML='Showing <b>'+rows.length.toLocaleString()+'</b> posted invoice(s) from Invoice Register. Filtered values are based on <b>invoice issue date</b> and use <b>actual posted sales</b> totals.';
+
+    var total=sum(rows.map(function(r){return r.total||0;}));
+    var customers=new Set(rows.map(function(r){return r.custName;}).filter(Boolean));
+    var paidValue=sum(rows.filter(function(r){return normalizeInvStatus(r)==='Paid';}).map(function(r){return r.total||0;}));
+    var avg=rows.length?total/rows.length:0;
+    var kpis=document.getElementById('pdKpis');
+    if(kpis) kpis.innerHTML =
+      '<div class="mx-kpi"><small>Posted Sales</small><b>'+moneySG(total)+'</b><div class="mx-sub">Total invoice value in current filter</div></div>'+
+      '<div class="mx-kpi"><small>Invoices Issued</small><b>'+rows.length.toLocaleString()+'</b><div class="mx-sub">Count of posted invoices</div></div>'+
+      '<div class="mx-kpi"><small>Active Customers</small><b>'+customers.size.toLocaleString()+'</b><div class="mx-sub">Customers with posted sales</div></div>'+
+      '<div class="mx-kpi"><small>Paid Portion</small><b>'+moneySG(paidValue)+'</b><div class="mx-sub">Average invoice '+moneySG(avg)+'</div></div>';
+
+    var byMonth={};
+    rows.forEach(function(r){ var p=dateParts_(r.date,'dmy'); var k=monthKey(p); byMonth[k]=(byMonth[k]||0)+(Number(r.total)||0); });
+    var monthItems=Object.keys(byMonth).sort().map(function(k){ return {label:monthLabel(k), value:byMonth[k]}; });
+    renderBarBlock('pdMonthly', monthItems, {format:function(v){return moneySG(v);}});
+    var sub=document.getElementById('pdMonthSub'); if(sub) sub.textContent = monthItems.length ? monthItems[0].label+' → '+monthItems[monthItems.length-1].label : 'No months';
+
+    var byCust={};
+    rows.forEach(function(r){ var k=String(r.custName||'Unspecified'); byCust[k]=(byCust[k]||0)+(Number(r.total)||0); });
+    var custItems=Object.keys(byCust).map(function(k){return {label:k, value:byCust[k]};}).sort(function(a,b){return b.value-a.value;}).slice(0,mxRange.pd.top);
+    renderBarBlock('pdCustomer', custItems, {format:function(v){return moneySG(v);}});
+
+    var months=Object.keys(byMonth).sort();
+    var custNames=Object.keys(byCust).sort(function(a,b){return (byCust[b]||0)-(byCust[a]||0);});
+    var matrix={}; custNames.forEach(function(c){matrix[c]={};});
+    rows.forEach(function(r){ var cust=String(r.custName||'Unspecified'); var k=monthKey(dateParts_(r.date,'dmy')); matrix[cust][k]=(matrix[cust][k]||0)+(Number(r.total)||0); });
+    var t=document.getElementById('pdMatrix');
+    if(t){
+      if(!rows.length){ t.innerHTML='<tr><td class="mx-empty">No posted sales data.</td></tr>'; }
+      else {
+        var head='<thead><tr><th>Customer</th>'+months.map(function(m){return '<th>'+h(monthLabel(m))+'</th>';}).join('')+'<th>Total</th></tr></thead>';
+        var body='<tbody>'+custNames.map(function(c){ var rowTot=0; var cells=months.map(function(m){ var v=matrix[c][m]||0; rowTot+=v; return '<td>'+(v?moneySG(v):'—')+'</td>'; }).join(''); return '<tr><td>'+h(c)+'</td>'+cells+'<td><b>'+moneySG(rowTot)+'</b></td></tr>'; }).join('');
+        var totalRow='<tr class="mx-total"><td>Total</td>'+months.map(function(m){ return '<td><b>'+moneySG(byMonth[m]||0)+'</b></td>'; }).join('')+'<td><b>'+moneySG(total)+'</b></td></tr>';
+        t.innerHTML=head+body+totalRow+'</tbody>';
+      }
+    }
+  }
+
+  function pdClear(){mxRange.pd={period:'all',top:10};['Period','From','To','Top'].forEach(function(k){var x=document.getElementById('pd'+k);if(x)x.value=k==='Top'?'10':k==='Period'?'all':'';}); psSel.year.clear(); psSel.month.clear(); psSel.customer.clear(); psSel.status.clear(); var s=document.getElementById('pdSearch'); if(s) s.value=''; renderPostedSalesTab(); }
+
+  function rowsSupplier(){
+    var search=((document.getElementById('sdSearch')||{value:''}).value||'').toLowerCase().trim();
+    return (window.vendorInvoices||[]).filter(function(r){
+      var p=(typeof vendorDateParts_==='function') ? vendorDateParts_(r.invoiceDate) : null;
+      if(!p) return false;
+      if(!mxDatePass(p,'sd'))return false;
+      var year=String(p.year), month=String(p.month).padStart(2,'0'), supplier=String(r.vendorName||'').trim(), status=String(r.status||'').trim()||'New', currency=String(r.currency||'SGD').trim().toUpperCase()||'SGD';
+      if(!matches(siSel.year, year)) return false;
+      if(!matches(siSel.month, month)) return false;
+      if(!matches(siSel.supplier, supplier)) return false;
+      if(!matches(siSel.status, status)) return false;
+      if(!matches(siSel.currency, currency)) return false;
+      if(search){
+        var itemHay=(Array.isArray(r.lineItems)?r.lineItems:[]).map(function(it){ return [it.itemCode,it.description,it.partNo,it.dwgNo].join(' '); }).join(' ');
+        var hay=[r.vendorName,r.invoiceNo,r.status,currency,itemHay].join(' ').toLowerCase();
+        if(hay.indexOf(search)===-1) return false;
+      }
+      return true;
+    });
+  }
+  function fullSupplierOptions(){
+    var src=(window.vendorInvoices||[]).filter(function(r){ return (typeof vendorDateParts_==='function') ? !!vendorDateParts_(r.invoiceDate) : !!r.invoiceDate; });
+    return {
+      years:Array.from(new Set(src.map(function(r){ var p=vendorDateParts_(r.invoiceDate); return p?String(p.year):''; }).filter(Boolean))).sort().reverse(),
+      months:Array.from(new Set(src.map(function(r){ var p=vendorDateParts_(r.invoiceDate); return p?String(p.month).padStart(2,'0'):''; }).filter(Boolean))).sort(function(a,b){ return +a-+b; }),
+      suppliers:Array.from(new Set(src.map(function(r){ return String(r.vendorName||'').trim(); }).filter(Boolean))).sort(),
+      statuses:Array.from(new Set(src.map(function(r){ return String(r.status||'').trim()||'New'; }).filter(Boolean))).sort(),
+      currencies:Array.from(new Set(src.map(function(r){ return String(r.currency||'SGD').trim().toUpperCase()||'SGD'; }).filter(Boolean))).sort()
+    };
+  }
+  function renderSupplierInvoiceDash(){
+    if(!document.getElementById('panelSupplierdash')) return;
+    var opts=fullSupplierOptions();
+    buildMulti('sdYears','sdYearText',opts.years,siSel.year,renderSupplierInvoiceDash,'All years');
+    buildMulti('sdMonths','sdMonthText',opts.months,siSel.month,renderSupplierInvoiceDash,'All months',function(v){ return monthNames[(+v)-1]; });
+    buildMulti('sdSuppliers','sdSupplierText',opts.suppliers,siSel.supplier,renderSupplierInvoiceDash,'All suppliers');
+    buildMulti('sdStatuses','sdStatusText',opts.statuses,siSel.status,renderSupplierInvoiceDash,'All statuses');
+    buildMulti('sdCurrencies','sdCurrencyText',opts.currencies,siSel.currency,renderSupplierInvoiceDash,'All currencies');
+    mxBuildActions('sd');
+    var rows=rowsSupplier();
+    var currencies=Array.from(new Set(rows.map(function(r){ return String(r.currency||'SGD').trim().toUpperCase()||'SGD'; }))).sort();
+    var byCurrency={};
+    currencies.forEach(function(c){ byCurrency[c]={rows:rows.filter(function(r){ return (String(r.currency||'SGD').trim().toUpperCase()||'SGD')===c; })}; });
+    Object.keys(byCurrency).forEach(function(c){ byCurrency[c].total=sum(byCurrency[c].rows.map(function(r){return r.total||0;})); });
+    var note=document.getElementById('sdNote');
+    if(note) note.innerHTML='Showing <b>'+rows.length.toLocaleString()+'</b> supplier invoice(s). Amount views are grouped by <b>currency</b> to avoid mixing unlike values.';
+    var activeSuppliers=new Set(rows.map(function(r){return r.vendorName;}).filter(Boolean)).size;
+    var reviewCount=rows.filter(function(r){ return String(r.status||'')==='Review Required'; }).length;
+    var thisMonthCount=rows.filter(function(r){ var p=vendorDateParts_(r.invoiceDate); if(!p) return false; var now=new Date(); return p.year===now.getFullYear() && p.month===now.getMonth()+1; }).length;
+    var kpis=document.getElementById('sdKpis');
+    if(kpis){
+      var chipLine = currencies.length ? '<div class="mx-chipline">'+currencies.map(function(c){ return '<span class="mx-chip">'+h(c)+' '+Number(byCurrency[c].total||0).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span>'; }).join('')+'</div>' : '<div class="mx-sub">No spend values</div>';
+      kpis.innerHTML =
+        '<div class="mx-kpi"><small>Supplier Invoices</small><b>'+rows.length.toLocaleString()+'</b><div class="mx-sub">Filtered invoice documents</div></div>'+
+        '<div class="mx-kpi"><small>Active Suppliers</small><b>'+activeSuppliers.toLocaleString()+'</b><div class="mx-sub">Suppliers represented in current filter</div></div>'+
+        '<div class="mx-kpi"><small>This Month</small><b>'+thisMonthCount.toLocaleString()+'</b><div class="mx-sub">Current-month invoice count</div></div>'+
+        '<div class="mx-kpi"><small>Spend by Currency</small><b>'+(currencies.length?currencies.length+' currenc'+(currencies.length>1?'ies':'y'):'—')+'</b>'+chipLine+'</div>';
+    }
+
+    var monthHost=document.getElementById('sdMonthly');
+    if(monthHost){
+      if(!rows.length) monthHost.innerHTML='<div class="mx-empty">No supplier invoice data matches the current filters.</div>';
+      else monthHost.innerHTML = currencies.map(function(cur){
+        var monthMap={};
+        byCurrency[cur].rows.forEach(function(r){ var k=monthKey(vendorDateParts_(r.invoiceDate)); monthMap[k]=(monthMap[k]||0)+(Number(r.total)||0); });
+        var items=Object.keys(monthMap).sort().map(function(k){ return {label:monthLabel(k), value:monthMap[k], currency:cur}; });
+        var max=Math.max.apply(null, items.map(function(x){return x.value||0;}))||1;
+        return '<div class="mx-currency-block"><div class="mx-currency-title"><span>'+h(cur)+'</span><span>'+Number(byCurrency[cur].total||0).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>'+items.map(function(x){ var pct=Math.max(3,Math.round((x.value/max)*100)); return '<div class="mx-barrow"><div class="mx-barlabel">'+h(x.label)+'</div><div class="mx-barbg"><div class="mx-bar" style="width:'+pct+'%"></div></div><div class="mx-barnum">'+h(cur)+' '+Number(x.value||0).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'; }).join('')+'</div>';
+      }).join('');
+    }
+
+    var supplierHost=document.getElementById('sdSupplier');
+    if(supplierHost){
+      if(!rows.length) supplierHost.innerHTML='<div class="mx-empty">No supplier totals available.</div>';
+      else supplierHost.innerHTML = currencies.map(function(cur){
+        var smap={}; byCurrency[cur].rows.forEach(function(r){ var s=String(r.vendorName||'Unspecified'); smap[s]=(smap[s]||0)+(Number(r.total)||0); });
+        var items=Object.keys(smap).map(function(k){ return {label:k, value:smap[k]}; }).sort(function(a,b){return b.value-a.value;}).slice(0,mxRange.sd.top);
+        var max=Math.max.apply(null, items.map(function(x){return x.value||0;}))||1;
+        return '<div class="mx-currency-block"><div class="mx-currency-title"><span>'+h(cur)+'</span><span>Top suppliers</span></div>'+items.map(function(x){ var pct=Math.max(3,Math.round((x.value/max)*100)); return '<div class="mx-barrow"><div class="mx-barlabel" title="'+h(x.label)+'">'+h(x.label)+'</div><div class="mx-barbg"><div class="mx-bar" style="width:'+pct+'%"></div></div><div class="mx-barnum">'+h(cur)+' '+Number(x.value||0).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'; }).join('')+'</div>';
+      }).join('');
+    }
+
+    var t=document.getElementById('sdMatrix');
+    if(t){
+      if(!rows.length){ t.innerHTML='<tr><td class="mx-empty">No supplier matrix data.</td></tr>'; }
+      else {
+        var allMonths=Array.from(new Set(rows.map(function(r){ return monthKey(vendorDateParts_(r.invoiceDate)); }))).sort();
+        var rowMap={};
+        rows.forEach(function(r){
+          var cur=String(r.currency||'SGD').trim().toUpperCase()||'SGD';
+          var supplier=String(r.vendorName||'Unspecified');
+          var key=supplier+' || '+cur;
+          if(!rowMap[key]) rowMap[key]={supplier:supplier,currency:cur,vals:{},total:0};
+          var mk=monthKey(vendorDateParts_(r.invoiceDate));
+          rowMap[key].vals[mk]=(rowMap[key].vals[mk]||0)+(Number(r.total)||0);
+          rowMap[key].total += (Number(r.total)||0);
+        });
+        var rowKeys=Object.keys(rowMap).sort(function(a,b){ return rowMap[b].total-rowMap[a].total; });
+        var head='<thead><tr><th>Supplier / Currency</th>'+allMonths.map(function(m){return '<th>'+h(monthLabel(m))+'</th>';}).join('')+'<th>Total</th></tr></thead><tbody>';
+        var body=rowKeys.map(function(key){ var rec=rowMap[key]; var cells=allMonths.map(function(m){ var v=rec.vals[m]||0; return '<td>'+(v?(h(rec.currency)+' '+Number(v).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2})):'—')+'</td>'; }).join(''); return '<tr><td>'+h(rec.supplier)+' <span style="color:#7c3aed;font-weight:700">('+h(rec.currency)+')</span></td>'+cells+'<td><b>'+h(rec.currency)+' '+Number(rec.total).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2})+'</b></td></tr>'; }).join('');
+        t.innerHTML=head+body+'</tbody>';
+      }
+    }
+  }
+  function sdClear(){mxRange.sd={period:'all',top:10};['Period','From','To','Top'].forEach(function(k){var x=document.getElementById('sd'+k);if(x)x.value=k==='Top'?'10':k==='Period'?'all':'';}); siSel.year.clear(); siSel.month.clear(); siSel.supplier.clear(); siSel.status.clear(); siSel.currency.clear(); var s=document.getElementById('sdSearch'); if(s) s.value=''; renderSupplierInvoiceDash(); }
+
+  function hookTabs(){
+    if(typeof window.switchTab !== 'function' || window.__invoiceSupplierDashHooked) return;
+    var orig=window.switchTab;
+    window.switchTab=function(tab){
+      document.getElementById('tabBtnPostedsales') && document.getElementById('tabBtnPostedsales').classList.remove('active');
+      document.getElementById('tabBtnSupplierdash') && document.getElementById('tabBtnSupplierdash').classList.remove('active');
+      document.getElementById('panelPostedsales') && document.getElementById('panelPostedsales').classList.remove('active');
+      document.getElementById('panelSupplierdash') && document.getElementById('panelSupplierdash').classList.remove('active');
+      if(tab === 'postedsales'){
+        window.currentTab = tab;
+        document.querySelectorAll('.tabs .tab-btn').forEach(function(b){ b.classList.remove('active'); });
+        document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+        document.getElementById('tabBtnPostedsales').classList.add('active');
+        document.getElementById('panelPostedsales').classList.add('active');
+        try{ if(typeof stopDOAutoPoll==='function') stopDOAutoPoll(); }catch(e){}
+        if((window.invoiceRegister||[]).length===0 && typeof syncInvoiceRegisterFromDrive==='function'){ try{ syncInvoiceRegisterFromDrive(); }catch(e){} }
+        renderPostedSalesTab();
+        return;
+      }
+      if(tab === 'supplierdash'){
+        window.currentTab = tab;
+        document.querySelectorAll('.tabs .tab-btn').forEach(function(b){ b.classList.remove('active'); });
+        document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+        document.getElementById('tabBtnSupplierdash').classList.add('active');
+        document.getElementById('panelSupplierdash').classList.add('active');
+        try{ if(typeof stopDOAutoPoll==='function') stopDOAutoPoll(); }catch(e){}
+        if((window.vendorInvoices||[]).length===0 && typeof loadVendorInvoices==='function'){
+          Promise.resolve(loadVendorInvoices()).then(function(){ renderSupplierInvoiceDash(); }).catch(function(){ renderSupplierInvoiceDash(); });
+        } else renderSupplierInvoiceDash();
+        return;
+      }
+      return orig.apply(this, arguments);
+    };
+    window.__invoiceSupplierDashHooked = true;
+  }
+  function hookRenders(){
+    if(typeof window.renderInvoiceRegister==='function' && !window.__postedRenderHooked){
+      var origReg=window.renderInvoiceRegister;
+      window.renderInvoiceRegister=function(){ var r=origReg.apply(this, arguments); if(document.getElementById('panelPostedsales') && document.getElementById('panelPostedsales').classList.contains('active')) renderPostedSalesTab(); return r; };
+      window.__postedRenderHooked=true;
+    }
+    if(typeof window.renderVendorInvoiceTab==='function' && !window.__supplierRenderHooked){
+      var origVendor=window.renderVendorInvoiceTab;
+      window.renderVendorInvoiceTab=function(){ var r=origVendor.apply(this, arguments); if(document.getElementById('panelSupplierdash') && document.getElementById('panelSupplierdash').classList.contains('active')) renderSupplierInvoiceDash(); return r; };
+      window.__supplierRenderHooked=true;
+    }
+  }
+  function boot(){ bootUI(); hookTabs(); hookRenders(); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  window.renderPostedSalesTab = renderPostedSalesTab;
+  window.renderSupplierInvoiceDash = renderSupplierInvoiceDash;
+  window.mxGetRows=function(side){return side==='pd'?rowsPosted():rowsSupplier();};
+  window.mxGetConfig=function(side){return mxRange[side];};
+  window.pdClear = pdClear;
+  window.sdClear = sdClear;
+})();
+</script>
+
+<style id="mx-sticky-export-style">
+:root{--mx-topbar-height:54px;--mx-tabs-height:68px}
+.container>.tabs{position:sticky!important;top:var(--mx-topbar-height)!important;z-index:75!important;background:#f4f6fb;padding:8px 5px;border-radius:14px;box-shadow:0 5px 20px #16294719;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+.tab-panel.active .sp-filter-grid,.tab-panel.active .mx-filter-grid,#panelSales.active>.toolbar,#panelInvoice.active #invCustFilterBar,#panelVendor.active #vendorFilterPanel,#panelOutstanding.active>.toolbar,#panelRegister.active .toolbar:has(#regCustFilter),#panelPayment.active .toolbar,#panelPvlist.active .toolbar,#panelVendorsoa.active .toolbar,#panelSoaarchive.active .toolbar{position:sticky!important;top:calc(var(--mx-topbar-height) + var(--mx-tabs-height) + 8px)!important;z-index:60!important;box-shadow:0 8px 24px #20385724!important;background:#fff}
+#panelVendor.active #vendorFilterPanel{max-height:55vh;overflow:auto}
+.mx-actions{display:flex;gap:10px;align-items:end;flex-wrap:wrap;padding:12px 14px;margin:12px 0;background:#fff;border:1px solid #dbe4f0;border-radius:12px}
+.mx-action-field{min-width:125px;flex:0 0 145px}.mx-action-field label{display:block;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;margin:0 0 5px}
+.mx-action-field select,.mx-action-field input{width:100%;height:36px;border:1px solid #cbd5e1;border-radius:8px;padding:5px 7px;background:#fff;font-size:12px}
+.mx-action-buttons{display:flex;gap:7px;flex-wrap:wrap;margin-left:auto}.mx-action-buttons button{width:auto;padding:9px 12px;background:#2456c8;color:#fff;border:0;border-radius:8px;font-weight:700;font-size:11px;cursor:pointer}
+@media(max-width:850px){.tab-panel.active .sp-filter-grid,.tab-panel.active .mx-filter-grid,#panelSales.active>.toolbar,#panelInvoice.active #invCustFilterBar,#panelVendor.active #vendorFilterPanel,#panelOutstanding.active>.toolbar,#panelRegister.active .toolbar:has(#regCustFilter),#panelPayment.active .toolbar,#panelPvlist.active .toolbar,#panelVendorsoa.active .toolbar,#panelSoaarchive.active .toolbar{position:relative!important;top:auto!important}.mx-action-buttons{margin-left:0}}
+@media print{.container>.tabs{position:static!important}.mx-actions{display:none!important}}
+</style>
+<script id="mx-export-and-sticky">
+(function(){
+function updateSticky(){var top=document.querySelector('.topbar'),tabs=document.querySelector('.container>.tabs');document.documentElement.style.setProperty('--mx-topbar-height',(top?Math.ceil(top.getBoundingClientRect().height):54)+'px');document.documentElement.style.setProperty('--mx-tabs-height',(tabs?Math.ceil(tabs.getBoundingClientRect().height):68)+'px');}
+window.addEventListener('resize',updateSticky);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',updateSticky);else updateSticky();
+if(typeof ResizeObserver!=='undefined'){var ro=new ResizeObserver(updateSticky);document.addEventListener('DOMContentLoaded',function(){var a=document.querySelector('.topbar'),b=document.querySelector('.container>.tabs');if(a)ro.observe(a);if(b)ro.observe(b);});}
+function n(v){return Number(v)||0;}
+function dateKey(value,side){var p=side==='pd'?dateParts_(value,'dmy'):vendorDateParts_(value);return p?String(p.year)+'-'+String(p.month).padStart(2,'0'):'';}
+function get(side){return typeof window.mxGetRows==='function'?window.mxGetRows(side):[];}
+function fields(side){return side==='pd'?['Invoice No','Customer','Invoice Date','Month','Customer PO','PR No','Status','Subtotal SGD','GST SGD','Total SGD']:['Invoice No','Supplier','Invoice Date','Month','Status','Currency','Invoice Total','Bill To'];}
+function detail(side,rows){return rows.map(function(r){return side==='pd'?[(r.invNo||''),(r.custName||''),formatDateDDMMYYYY_(r.date),dateKey(r.date,side),(r.custPO||''),(r.prRef||''),(r.status||''),n(r.subtotal),n(r.gst),n(r.total)]:[(r.invoiceNo||''),(r.vendorName||''),formatVendorDate_(r.invoiceDate),dateKey(r.invoiceDate,side),(r.status||''),(r.currency||'SGD'),n(r.total),(r.billToName||'')];});}
+function groups(side,rows){var out=new Map();rows.forEach(function(r){var c=side==='pd'?'SGD':String(r.currency||'SGD').trim().toUpperCase();var key=side==='pd'?String(r.custName||'Unspecified'):String(r.vendorName||'Unspecified');var k=c+'|'+key;out.set(k,(out.get(k)||0)+n(r.total));});return Array.from(out.entries()).map(function(e){var ix=e[0].indexOf('|');return {currency:e[0].slice(0,ix),name:e[0].slice(ix+1),value:e[1]};}).sort(function(a,b){return a.currency.localeCompare(b.currency)||b.value-a.value;});}
+function months(side,rows){var m=new Map();rows.forEach(function(r){var c=side==='pd'?'SGD':String(r.currency||'SGD').trim().toUpperCase(),k=dateKey(side==='pd'?r.date:r.invoiceDate,side);if(!k)return;var key=c+'|'+k;m.set(key,(m.get(key)||0)+n(r.total));});return Array.from(m.entries()).map(function(e){var a=e[0].split('|');return {currency:a[0],name:a[1],value:e[1]};}).sort(function(a,b){return a.currency.localeCompare(b.currency)||a.name.localeCompare(b.name);});}
+function title(side){return side==='pd'?'Posted Sales':'Supplier Invoices';}
+function stamp(){return new Date().toISOString().slice(0,10);}
+window.mxExcel=function(side){var rows=get(side);if(!rows.length){alert('No matching invoice records to export.');return;}if(typeof XLSX==='undefined'){alert('Excel library unavailable. Check network connection.');return;}
+var wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet([fields(side)].concat(detail(side,rows)));ws['!cols']=fields(side).map(function(k){return {wch:Math.max(k.length+3,15)};});XLSX.utils.book_append_sheet(wb,ws,'Invoice Details');
+var m=XLSX.utils.aoa_to_sheet([['Currency','Month','Invoice Value']].concat(months(side,rows).map(function(r){return [r.currency,r.name,r.value];})));XLSX.utils.book_append_sheet(wb,m,'Monthly');
+var g=XLSX.utils.aoa_to_sheet([['Currency',side==='pd'?'Customer':'Supplier','Invoice Value']].concat(groups(side,rows).map(function(r){return [r.currency,r.name,r.value];})));XLSX.utils.book_append_sheet(wb,g,side==='pd'?'Customers':'Suppliers');XLSX.writeFile(wb,(side==='pd'?'Posted_Sales':'Supplier_Invoices')+'_'+stamp()+'.xlsx');};
+window.mxPPT=async function(side){var rows=get(side);if(!rows.length){alert('No matching invoice records to export.');return;}if(typeof PptxGenJS==='undefined'){alert('PowerPoint library unavailable. Check network connection.');return;}
+var p=new PptxGenJS();p.layout='LAYOUT_WIDE';p.author='Mikuron Dashboard';p.subject=title(side)+' performance dashboard';var cur=Array.from(new Set(rows.map(function(r){return side==='pd'?'SGD':String(r.currency||'SGD').trim().toUpperCase();})));var sums=cur.map(function(c){return c+' '+rows.filter(function(r){return (side==='pd'?'SGD':String(r.currency||'SGD').trim().toUpperCase())===c;}).reduce(function(a,r){return a+n(r.total);},0).toLocaleString('en-SG',{maximumFractionDigits:2});});
+function cover(sl,subtitle){sl.background={color:'F5F8FE'};sl.addText('MIKURON  /  ANALYTICS',{x:.55,y:.3,w:7,h:.3,fontSize:10,bold:true,color:'2563EB'});sl.addText(title(side),{x:.55,y:.8,w:12,h:.55,fontSize:26,bold:true,color:'172D54'});sl.addText(subtitle,{x:.55,y:1.45,w:12,h:.3,fontSize:11,color:'64748B'});}
+var sl=p.addSlide();cover(sl,'Based on invoice issue date  •  '+rows.length+' invoices  •  '+stamp());sl.addText('Filtered invoice values',{x:.7,y:2.05,w:11,h:.4,fontSize:19,bold:true,color:'172D54'});sums.slice(0,8).forEach(function(t,i){sl.addText(t,{x:.8,y:2.65+i*.48,w:11.8,h:.32,fontSize:18,bold:true,color:'2563EB'});});
+function addRank(items,label){var ss=p.addSlide();cover(ss,label);var grouped={};items.forEach(function(q){(grouped[q.currency]||(grouped[q.currency]=[])).push(q);});var y=2;Object.keys(grouped).forEach(function(c){var vals=grouped[c].slice(0,Math.max(1,Math.min(8,Math.floor((6.6-y)/.39))));if(y>6.4)return;ss.addText(c,{x:.65,y:y,w:2,h:.25,fontSize:12,bold:true,color:'7C3AED'});y+=.3;vals.forEach(function(r){if(y>6.65)return;ss.addText(r.name,{x:.7,y:y,w:7.7,h:.29,fontSize:11,color:'243552',breakLine:false});ss.addText(r.value.toLocaleString('en-SG',{maximumFractionDigits:2}),{x:8.5,y:y,w:3.5,h:.29,fontSize:11,bold:true,color:'1D4ED8',align:'right'});y+=.38;});y+=.16;});}
+addRank(months(side,rows),'Invoice value by month');addRank(groups(side,rows).slice(0,window.mxGetConfig?window.mxGetConfig(side).top:10),side==='pd'?'Sales by customer':'Invoices by supplier');await p.writeFile({fileName:(side==='pd'?'Posted_Sales':'Supplier_Invoices')+'_'+stamp()+'.pptx'});};
+window.mxPNG=function(side){var rows=get(side);if(!rows.length){alert('No matching invoice records to export.');return;}var values=groups(side,rows).slice(0,(window.mxGetConfig?window.mxGetConfig(side).top:10));var currencies=Array.from(new Set(values.map(function(x){return x.currency;})));if(currencies.length>1){var selected=(document.getElementById(side+'Currencies')||{}).querySelectorAll?.('input:checked')||[];alert('PNG export requires one currency for a comparable bar chart. Select one currency in the filter.');return;}var canvas=document.createElement('canvas');canvas.width=1600;canvas.height=Math.max(720,180+values.length*50);var ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#183153';ctx.font='bold 42px Arial';ctx.fillText(title(side)+' — Top '+values.length,70,78);ctx.fillStyle='#64748b';ctx.font='22px Arial';ctx.fillText('Invoice issue date  •  '+stamp()+'  •  '+(currencies[0]||'SGD'),72,120);var max=Math.max(1,...values.map(function(v){return v.value;}));values.forEach(function(v,i){var y=180+i*50;ctx.fillStyle='#334155';ctx.font='18px Arial';var name=v.name.length>33?v.name.slice(0,32)+'…':v.name;ctx.fillText(name,60,y+19);ctx.fillStyle='#eaf0f8';ctx.fillRect(520,y,720,27);ctx.fillStyle=side==='pd'?'#2563eb':'#7c3aed';ctx.fillRect(520,y,720*(v.value/max),27);ctx.fillStyle='#183153';ctx.font='bold 18px Arial';ctx.fillText(v.value.toLocaleString('en-SG',{maximumFractionDigits:2}),1260,y+19);});var a=document.createElement('a');a.download=(side==='pd'?'Posted_Sales':'Supplier_Invoices')+'_Chart_'+stamp()+'.png';a.href=canvas.toDataURL('image/png');a.click();};
+})();
+</script>
